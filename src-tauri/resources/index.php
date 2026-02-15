@@ -28,7 +28,13 @@
     z-index: 10;
   }
 
-  .header h1 {
+  .header-left {
+    display: flex;
+    align-items: center;
+    gap: 0.625rem;
+  }
+
+  .header-left h1 {
     font-size: 14px;
     font-weight: 600;
     letter-spacing: -0.01em;
@@ -47,11 +53,29 @@
     padding: 6px 12px;
     border-radius: 6px;
     transition: all 0.15s;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
   }
 
   .header-nav a:hover {
     background: hsl(0 0% 96%);
     color: hsl(0 0% 12%);
+  }
+
+  .header-nav a svg { width: 14px; height: 14px; }
+
+  .github-btn {
+    background: hsl(0 0% 9%) !important;
+    color: hsl(0 0% 100%) !important;
+    padding: 6px 14px !important;
+    border-radius: 6px;
+    font-weight: 500 !important;
+  }
+
+  .github-btn:hover {
+    background: hsl(0 0% 20%) !important;
+    color: hsl(0 0% 100%) !important;
   }
 
   .container {
@@ -66,20 +90,8 @@
   }
 
   .hero-logo {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 48px;
-    height: 48px;
-    background: hsl(0 0% 12%);
-    border-radius: 12px;
-    margin-bottom: 1rem;
-  }
-
-  .hero-logo svg {
-    width: 24px;
-    height: 24px;
-    color: hsl(0 0% 98%);
+    display: inline-block;
+    margin-bottom: 1.25rem;
   }
 
   .hero h2 {
@@ -92,7 +104,7 @@
   .hero p {
     font-size: 13px;
     color: hsl(0 0% 45%);
-    max-width: 400px;
+    max-width: 420px;
     margin: 0 auto;
     line-height: 1.5;
   }
@@ -270,6 +282,14 @@
     color: hsl(0 0% 35%);
   }
 
+  .quick-link .ql-icon.dark {
+    background: hsl(0 0% 9%);
+  }
+
+  .quick-link .ql-icon.dark svg {
+    color: hsl(0 0% 100%);
+  }
+
   .quick-link .ql-text h4 {
     font-size: 12px;
     font-weight: 600;
@@ -370,6 +390,32 @@
     padding: 1.5rem 0 2rem;
     font-size: 11px;
     color: hsl(0 0% 65%);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.75rem;
+  }
+
+  .footer-brand {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    text-decoration: none;
+    color: hsl(0 0% 35%);
+    transition: color 0.15s;
+  }
+
+  .footer-brand:hover { color: hsl(0 0% 10%); }
+
+  .footer-brand img {
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+  }
+
+  .footer-brand span {
+    font-size: 12px;
+    font-weight: 500;
   }
 
   .footer a {
@@ -404,18 +450,43 @@ $display_errors = ini_get('display_errors');
 ?>
 
 <div class="header">
-  <h1>LokcalDev</h1>
+  <div class="header-left">
+    <svg width="24" height="24" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <rect x="2" y="2" width="60" height="60" rx="14" fill="url(#hg)"/>
+      <path d="M24 21L13 32L24 43" stroke="white" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" opacity="0.9"/>
+      <path d="M40 21L51 32L40 43" stroke="white" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" opacity="0.9"/>
+      <rect x="28" y="25" width="8" height="2.5" rx="1.25" fill="white" opacity="0.95"/>
+      <rect x="28" y="30.75" width="8" height="2.5" rx="1.25" fill="white" opacity="0.75"/>
+      <rect x="28" y="36.5" width="8" height="2.5" rx="1.25" fill="white" opacity="0.55"/>
+      <defs><linearGradient id="hg" x1="2" y1="2" x2="62" y2="62" gradientUnits="userSpaceOnUse"><stop stop-color="#1e293b"/><stop offset="1" stop-color="#0f172a"/></linearGradient></defs>
+    </svg>
+    <h1>LokcalDev</h1>
+  </div>
   <div class="header-nav">
     <a href="/phpmyadmin" target="_blank">phpMyAdmin</a>
     <a href="?phpinfo=1">PHP Info</a>
+    <a href="https://github.com/unkownpr/lokcalDev" target="_blank" class="github-btn">
+      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/></svg>
+      GitHub
+    </a>
   </div>
 </div>
 
 <div class="container">
   <div class="hero">
     <div class="hero-logo">
-      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
-        <path stroke-linecap="round" stroke-linejoin="round" d="M5.25 14.25h13.5m-13.5 0a3 3 0 0 1-3-3m3 3a3 3 0 1 0 0 6h13.5a3 3 0 1 0 0-6m-16.5-3a3 3 0 0 1 3-3h13.5a3 3 0 0 1 3 3m-19.5 0a4.5 4.5 0 0 1 .9-2.7L5.737 5.1a3.375 3.375 0 0 1 2.7-1.35h7.126c1.062 0 2.062.5 2.7 1.35l2.587 3.45a4.5 4.5 0 0 1 .9 2.7m0 0a3 3 0 0 1-3 3m0 3h.008v.008h-.008v-.008Zm0-6h.008v.008h-.008v-.008Zm-3 6h.008v.008h-.008v-.008Zm0-6h.008v.008h-.008v-.008Z" />
+      <svg width="56" height="56" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <rect x="2" y="2" width="60" height="60" rx="14" fill="url(#lg)"/>
+        <rect x="2" y="2" width="60" height="60" rx="14" fill="url(#ls)" opacity="0.5"/>
+        <path d="M24 21L13 32L24 43" stroke="white" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" opacity="0.9"/>
+        <path d="M40 21L51 32L40 43" stroke="white" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" opacity="0.9"/>
+        <rect x="28" y="25" width="8" height="2.5" rx="1.25" fill="white" opacity="0.95"/>
+        <rect x="28" y="30.75" width="8" height="2.5" rx="1.25" fill="white" opacity="0.75"/>
+        <rect x="28" y="36.5" width="8" height="2.5" rx="1.25" fill="white" opacity="0.55"/>
+        <defs>
+          <linearGradient id="lg" x1="2" y1="2" x2="62" y2="62" gradientUnits="userSpaceOnUse"><stop stop-color="#1e293b"/><stop offset="1" stop-color="#0f172a"/></linearGradient>
+          <linearGradient id="ls" x1="32" y1="2" x2="32" y2="62" gradientUnits="userSpaceOnUse"><stop stop-color="white" stop-opacity="0.12"/><stop offset="1" stop-color="white" stop-opacity="0"/></linearGradient>
+        </defs>
       </svg>
     </div>
     <h2>Your local dev environment is running</h2>
@@ -462,6 +533,15 @@ $display_errors = ini_get('display_errors');
           <p>Manage your databases</p>
         </div>
       </a>
+      <a href="https://github.com/unkownpr/lokcalDev" class="quick-link" target="_blank">
+        <div class="ql-icon dark">
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/></svg>
+        </div>
+        <div class="ql-text">
+          <h4>Source Code</h4>
+          <p>Star us on GitHub</p>
+        </div>
+      </a>
       <a href="?phpinfo=1" class="quick-link">
         <div class="ql-icon">
           <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="m11.25 11.25.041-.02a.75.75 0 0 1 1.063.852l-.708 2.836a.75.75 0 0 0 1.063.853l.041-.021M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9-3.75h.008v.008H12V8.25Z" /></svg>
@@ -469,15 +549,6 @@ $display_errors = ini_get('display_errors');
         <div class="ql-text">
           <h4>PHP Info</h4>
           <p>Full configuration details</p>
-        </div>
-      </a>
-      <a href="mailto:" class="quick-link" onclick="event.preventDefault();">
-        <div class="ql-icon">
-          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6.042A8.967 8.967 0 0 0 6 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 0 1 6 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 0 1 6-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0 0 18 18a8.967 8.967 0 0 0-6 2.292m0-14.25v14.25" /></svg>
-        </div>
-        <div class="ql-text">
-          <h4>Documentation</h4>
-          <p>LokcalDev guides</p>
         </div>
       </a>
     </div>
@@ -555,7 +626,14 @@ $display_errors = ini_get('display_errors');
   </div>
 
   <div class="footer">
-    Served by <strong>LokcalDev</strong> &mdash; PHP <?= $php_version ?> &middot; <?= htmlspecialchars($nginx_version) ?>
+    <a href="https://ssilistre.dev" target="_blank" class="footer-brand">
+      <img src="https://ssilistre.dev/public/images/ssilistre_face.png" alt="ssilistre.dev" />
+      <span>ssilistre.dev</span>
+    </a>
+    <div>
+      Served by <strong>LokcalDev</strong> &mdash; PHP <?= $php_version ?> &middot; <?= htmlspecialchars($nginx_version) ?>
+      &middot; <a href="https://github.com/unkownpr/lokcalDev" target="_blank">GitHub</a>
+    </div>
   </div>
 </div>
 

@@ -14,6 +14,7 @@ import {
 import { cn } from "@/lib/utils"
 import { APP_NAME } from "@/lib/constants"
 import { Logo } from "@/components/shared/Logo"
+import { UpdateNotification } from "@/components/shared/UpdateNotification"
 import { useAppStore } from "@/stores/appStore"
 import { open } from "@tauri-apps/plugin-shell"
 
@@ -41,6 +42,7 @@ const navItems = [
 
 export function Sidebar() {
   const appVersion = useAppStore((s) => s.systemInfo?.appVersion)
+  const updateAvailable = useAppStore((s) => s.updateAvailable)
   return (
     <aside className="flex h-screen w-56 flex-col border-r border-border bg-sidebar">
       <div className="flex h-14 items-center gap-2.5 px-4">
@@ -74,6 +76,7 @@ export function Sidebar() {
         })}
       </nav>
 
+      <UpdateNotification />
       <div className="border-t border-border px-3 py-3 space-y-2">
         <button
           onClick={() => open("https://github.com/unkownpr/lokcalDev")}
@@ -95,7 +98,12 @@ export function Sidebar() {
             />
             <span className="text-[10px] text-muted-foreground">ssilistre.dev</span>
           </button>
-          <span className="text-[10px] text-muted-foreground">v{appVersion ?? "0.1.0"}</span>
+          <span className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
+            v{appVersion ?? "0.1.0"}
+            {updateAvailable && (
+              <span className="h-1.5 w-1.5 rounded-full bg-primary animate-pulse" />
+            )}
+          </span>
         </div>
       </div>
     </aside>

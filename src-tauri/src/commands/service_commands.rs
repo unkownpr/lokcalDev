@@ -47,12 +47,12 @@ pub fn get_all_services(state: State<'_, AppState>) -> Result<Vec<ServiceInfo>, 
         }
     }
 
-    // Update phpMyAdmin with real status (no process — installed or not)
+    // Update phpMyAdmin with real status (depends on MariaDB running)
     if let Some(svc) = services.get_mut("phpmyadmin") {
         svc.installed = pma_info.installed;
         svc.initialized = pma_info.installed;
         svc.version = pma_info.version;
-        svc.status = if pma_info.installed {
+        svc.status = if pma_info.installed && mariadb_info.running {
             ServiceStatus::Running
         } else {
             ServiceStatus::Stopped
@@ -169,12 +169,13 @@ pub fn start_service(
             Ok(info)
         }
         "phpmyadmin" => {
-            // phpMyAdmin has no process — return current info
+            // phpMyAdmin has no process — status depends on MariaDB
             let pma = PhpMyAdminManager::get_info();
+            let mariadb = MariaDbManager::get_info();
             let info = ServiceInfo {
                 id: "phpmyadmin".to_string(),
                 name: "phpMyAdmin".to_string(),
-                status: if pma.installed { ServiceStatus::Running } else { ServiceStatus::Stopped },
+                status: if pma.installed && mariadb.running { ServiceStatus::Running } else { ServiceStatus::Stopped },
                 port: None,
                 version: pma.version,
                 pid: None,
@@ -274,12 +275,13 @@ pub fn stop_service(
             Ok(info)
         }
         "phpmyadmin" => {
-            // phpMyAdmin has no process — return current info
+            // phpMyAdmin has no process — status depends on MariaDB
             let pma = PhpMyAdminManager::get_info();
+            let mariadb = MariaDbManager::get_info();
             let info = ServiceInfo {
                 id: "phpmyadmin".to_string(),
                 name: "phpMyAdmin".to_string(),
-                status: if pma.installed { ServiceStatus::Running } else { ServiceStatus::Stopped },
+                status: if pma.installed && mariadb.running { ServiceStatus::Running } else { ServiceStatus::Stopped },
                 port: None,
                 version: pma.version,
                 pid: None,

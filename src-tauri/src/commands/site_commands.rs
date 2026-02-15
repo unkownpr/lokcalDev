@@ -1,5 +1,7 @@
 use crate::error::AppError;
 use crate::services::site_manager::{CreateSiteRequest, Site, SiteManager, UpdateSiteRequest};
+use crate::services::template_manager::TemplateManager;
+use tauri::AppHandle;
 
 #[tauri::command]
 pub fn site_list() -> Result<Vec<Site>, AppError> {
@@ -18,6 +20,7 @@ pub fn site_create(
     document_root: String,
     php_version: String,
     ssl: bool,
+    template: Option<String>,
 ) -> Result<Site, AppError> {
     SiteManager::create(CreateSiteRequest {
         name,
@@ -25,6 +28,7 @@ pub fn site_create(
         document_root,
         php_version,
         ssl,
+        template,
     })
 }
 
@@ -54,4 +58,13 @@ pub fn site_update(
 #[tauri::command]
 pub fn site_delete(id: String) -> Result<(), AppError> {
     SiteManager::delete(&id)
+}
+
+#[tauri::command]
+pub async fn site_setup_template(
+    app: AppHandle,
+    site_id: String,
+    template: String,
+) -> Result<(), AppError> {
+    TemplateManager::setup(&app, &site_id, &template).await
 }

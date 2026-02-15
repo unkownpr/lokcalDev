@@ -6,6 +6,8 @@ mod state;
 
 use config::paths;
 use state::AppState;
+use tauri::image::Image;
+use tauri::menu::{AboutMetadata, Menu, PredefinedMenuItem, Submenu};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -23,6 +25,70 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_process::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .menu(|app| {
+            let icon = Image::from_bytes(include_bytes!("../icons/128x128@2x.png")).ok();
+            let about_metadata = AboutMetadata {
+                name: Some("LokcalDev".into()),
+                version: Some(env!("CARGO_PKG_VERSION").into()),
+                copyright: Some("\u{00A9} 2026 ssilistre.dev. All rights reserved.".into()),
+                credits: Some("Local development environment manager".into()),
+                icon,
+                ..Default::default()
+            };
+
+            let app_menu = Submenu::with_items(
+                app,
+                "LokcalDev",
+                true,
+                &[
+                    &PredefinedMenuItem::about(app, None, Some(about_metadata))?,
+                    &PredefinedMenuItem::separator(app)?,
+                    &PredefinedMenuItem::services(app, None)?,
+                    &PredefinedMenuItem::separator(app)?,
+                    &PredefinedMenuItem::hide(app, None)?,
+                    &PredefinedMenuItem::hide_others(app, None)?,
+                    &PredefinedMenuItem::separator(app)?,
+                    &PredefinedMenuItem::quit(app, None)?,
+                ],
+            )?;
+
+            let edit_menu = Submenu::with_items(
+                app,
+                "Edit",
+                true,
+                &[
+                    &PredefinedMenuItem::undo(app, None)?,
+                    &PredefinedMenuItem::redo(app, None)?,
+                    &PredefinedMenuItem::separator(app)?,
+                    &PredefinedMenuItem::cut(app, None)?,
+                    &PredefinedMenuItem::copy(app, None)?,
+                    &PredefinedMenuItem::paste(app, None)?,
+                    &PredefinedMenuItem::select_all(app, None)?,
+                ],
+            )?;
+
+            let view_menu = Submenu::with_items(
+                app,
+                "View",
+                true,
+                &[&PredefinedMenuItem::fullscreen(app, None)?],
+            )?;
+
+            let window_menu = Submenu::with_items(
+                app,
+                "Window",
+                true,
+                &[
+                    &PredefinedMenuItem::minimize(app, None)?,
+                    &PredefinedMenuItem::maximize(app, None)?,
+                    &PredefinedMenuItem::separator(app)?,
+                    &PredefinedMenuItem::close_window(app, None)?,
+                ],
+            )?;
+
+            Menu::with_items(app, &[&app_menu, &edit_menu, &view_menu, &window_menu])
+        })
         .setup(|app| {
             if cfg!(debug_assertions) {
                 app.handle().plugin(
@@ -69,6 +135,7 @@ pub fn run() {
             commands::site_commands::site_create,
             commands::site_commands::site_update,
             commands::site_commands::site_delete,
+            commands::site_commands::site_setup_template,
             // Database commands
             commands::database_commands::mariadb_install,
             commands::database_commands::mariadb_get_info,

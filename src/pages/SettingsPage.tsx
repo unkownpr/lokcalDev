@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/select"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { PageHeader } from "@/components/shared/PageHeader"
+import { RefreshCw, Loader2, CheckCircle2 } from "lucide-react"
 import { useSettingsStore } from "@/stores/settingsStore"
 import { useAppStore } from "@/stores/appStore"
 import type { AppConfig } from "@/types/config"
@@ -20,6 +21,14 @@ import type { AppConfig } from "@/types/config"
 export function SettingsPage() {
   const { config, fetchSettings, saveSettings, resetSettings } = useSettingsStore()
   const systemInfo = useAppStore((s) => s.systemInfo)
+  const {
+    updateAvailable,
+    updateVersion,
+    updateChecking,
+    updateInstalling,
+    checkForUpdate: checkUpdate,
+    installUpdate,
+  } = useAppStore()
   const [form, setForm] = useState<AppConfig | null>(null)
   const [saved, setSaved] = useState(false)
 
@@ -148,7 +157,7 @@ export function SettingsPage() {
           </Card>
         </TabsContent>
 
-        <TabsContent value="about" className="mt-4">
+        <TabsContent value="about" className="mt-4 space-y-4">
           <Card className="p-4 space-y-3">
             <div className="flex items-center justify-between">
               <span className="text-sm text-muted-foreground">Application</span>
@@ -165,6 +174,49 @@ export function SettingsPage() {
             <div className="flex items-center justify-between">
               <span className="text-sm text-muted-foreground">Data Directory</span>
               <span className="text-sm font-mono text-xs truncate max-w-[300px]">{systemInfo?.dataDir ?? "-"}</span>
+            </div>
+          </Card>
+
+          <Card className="p-4 space-y-3">
+            <div className="flex items-center justify-between">
+              <div>
+                <Label>Software Updates</Label>
+                <p className="text-[11px] text-muted-foreground">
+                  {updateAvailable
+                    ? `Version ${updateVersion} is available`
+                    : "You're on the latest version"}
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                {updateAvailable ? (
+                  <Button
+                    size="sm"
+                    onClick={installUpdate}
+                    disabled={updateInstalling}
+                  >
+                    {updateInstalling ? (
+                      <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <RefreshCw className="mr-1.5 h-3.5 w-3.5" />
+                    )}
+                    {updateInstalling ? "Installing..." : "Update Now"}
+                  </Button>
+                ) : (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={checkUpdate}
+                    disabled={updateChecking}
+                  >
+                    {updateChecking ? (
+                      <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <CheckCircle2 className="mr-1.5 h-3.5 w-3.5" />
+                    )}
+                    {updateChecking ? "Checking..." : "Check for Updates"}
+                  </Button>
+                )}
+              </div>
             </div>
           </Card>
         </TabsContent>

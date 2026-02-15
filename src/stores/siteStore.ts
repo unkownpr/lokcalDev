@@ -10,7 +10,8 @@ interface SiteStore {
   error: string | null
   fetchSites: () => Promise<void>
   fetchNginxInfo: () => Promise<void>
-  createSite: (name: string, domain: string, documentRoot: string, phpVersion: string, ssl: boolean) => Promise<void>
+  createSite: (name: string, domain: string, documentRoot: string, phpVersion: string, ssl: boolean, template?: string) => Promise<void>
+  setupTemplate: (siteId: string, template: string) => Promise<void>
   updateSite: (id: string, data: Partial<Site>) => Promise<void>
   deleteSite: (id: string) => Promise<void>
   installNginx: () => Promise<void>
@@ -46,8 +47,9 @@ export const useSiteStore = create<SiteStore>((set, get) => ({
   },
 
   createSite: async (name, domain, documentRoot, phpVersion, ssl) => {
+    let site: Site | null = null
     try {
-      await tauri.siteCreate(name, domain, documentRoot, phpVersion, ssl)
+      site = await tauri.siteCreate(name, domain, documentRoot, phpVersion, ssl)
     } catch (err) {
       const msg = String(err)
       set({ error: msg })
@@ -55,37 +57,50 @@ export const useSiteStore = create<SiteStore>((set, get) => ({
       return
     }
 
-    let hasWarnings = false
+    // Privileged operations (require admin password on macOS)
+    let dnsOk = true
+    let nginxOk = true
 
     // Add DNS entry
     try {
       await tauri.dnsAddEntry(domain, "127.0.0.1")
-    } catch (err) {
-      hasWarnings = true
-      toast.error("Site created but DNS entry failed", { description: String(err) })
+    } catch {
+      dnsOk = false
     }
 
     // Generate SSL certificate if enabled
     if (ssl) {
       try {
         await tauri.sslGenerateCertificate(domain)
-      } catch (err) {
-        hasWarnings = true
-        toast.error("SSL certificate generation failed", { description: String(err) })
-      }
+      } catch {}
     }
 
     // Reload nginx to pick up new config
     try {
       await tauri.nginxReload()
-    } catch (err) {
-      hasWarnings = true
-      toast.error("Nginx reload failed", { description: String(err) })
+    } catch {
+      nginxOk = false
+    }
+
+    // If both privileged operations failed (user likely cancelled), roll back
+    if (!dnsOk && !nginxOk) {
+      try {
+        await tauri.siteDelete(site.id)
+      } catch {}
+      await get().fetchSites()
+      toast.error("Site creation cancelled", {
+        description: "Admin access is required for DNS and Nginx configuration.",
+      })
+      return
     }
 
     await get().fetchSites()
-    if (!hasWarnings) {
+    if (dnsOk && nginxOk) {
       toast.success(`Site "${name}" created`, { description: `${ssl ? "https" : "http"}://${domain}` })
+    } else {
+      toast.warning(`Site "${name}" created with warnings`, {
+        description: "Some operations required admin access and were skipped.",
+      })
     }
   },
 
@@ -102,15 +117,19 @@ export const useSiteStore = create<SiteStore>((set, get) => ({
       return
     }
 
+    let hasWarnings = false
+
     // Handle domain change: remove old DNS, add new DNS
     if (data.domain && oldSite && data.domain !== oldSite.domain) {
       try {
         await tauri.dnsRemoveEntry(oldSite.domain)
-      } catch {}
+      } catch {
+        hasWarnings = true
+      }
       try {
         await tauri.dnsAddEntry(data.domain, "127.0.0.1")
-      } catch (err) {
-        toast.error("DNS update failed", { description: String(err) })
+      } catch {
+        hasWarnings = true
       }
     }
 
@@ -122,23 +141,52 @@ export const useSiteStore = create<SiteStore>((set, get) => ({
     if (newSsl && newDomain && (sslToggled || domainChanged)) {
       try {
         await tauri.sslGenerateCertificate(newDomain)
-      } catch (err) {
-        toast.error("SSL certificate generation failed", { description: String(err) })
+      } catch {
+        hasWarnings = true
       }
     }
 
     // Reload nginx
     try {
       await tauri.nginxReload()
-    } catch {}
+    } catch {
+      hasWarnings = true
+    }
 
     await get().fetchSites()
-    toast.success("Site updated")
+    if (!hasWarnings) {
+      toast.success("Site updated")
+    } else {
+      toast.warning("Site updated with warnings", {
+        description: "Some operations required admin access and were skipped.",
+      })
+    }
   },
 
   deleteSite: async (id) => {
     const site = get().sites.find((s) => s.id === id)
 
+    // First, try privileged operations (require admin password on macOS)
+    let dnsOk = true
+    let nginxOk = true
+
+    if (site) {
+      try {
+        await tauri.dnsRemoveEntry(site.domain)
+      } catch {
+        dnsOk = false
+      }
+    }
+
+    // If DNS failed (user cancelled password), skip the rest
+    if (!dnsOk) {
+      toast.error("Site deletion cancelled", {
+        description: "Admin access is required to update DNS and Nginx.",
+      })
+      return
+    }
+
+    // Delete site files + nginx config
     try {
       await tauri.siteDelete(id)
     } catch (err) {
@@ -148,20 +196,21 @@ export const useSiteStore = create<SiteStore>((set, get) => ({
       return
     }
 
-    // Remove DNS entry
-    if (site) {
-      try {
-        await tauri.dnsRemoveEntry(site.domain)
-      } catch {}
-    }
-
     // Reload nginx
     try {
       await tauri.nginxReload()
-    } catch {}
+    } catch {
+      nginxOk = false
+    }
 
     await get().fetchSites()
-    toast.success("Site deleted")
+    if (nginxOk) {
+      toast.success("Site deleted")
+    } else {
+      toast.warning("Site deleted", {
+        description: "Nginx reload was skipped — admin access required.",
+      })
+    }
   },
 
   installNginx: async () => {

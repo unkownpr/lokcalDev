@@ -16,4 +16,6 @@ export interface Site {
   ssl: boolean
   active: boolean
   createdAt: string
+  template?: string
+  templateStatus?: string
 }

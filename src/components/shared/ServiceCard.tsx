@@ -23,7 +23,7 @@ export function ServiceCard({ service, onInstall, onInitialize, onStart, onStop,
     <Card className="flex items-center justify-between p-4">
       <div className="flex items-center gap-3">
         <StatusIndicator
-          status={!service.installed ? "stopped" : isWebOnly ? (service.installed ? "running" : "stopped") : service.status}
+          status={!service.installed ? "stopped" : service.status}
           size="md"
         />
         <div>
@@ -53,7 +53,7 @@ export function ServiceCard({ service, onInstall, onInitialize, onStart, onStop,
             <Download className="mr-1.5 h-3.5 w-3.5" />
             Install
           </Button>
-        ) : isWebOnly ? (
+        ) : isWebOnly && isRunning ? (
           <Button
             variant="ghost"
             size="sm"
@@ -61,6 +61,15 @@ export function ServiceCard({ service, onInstall, onInitialize, onStart, onStop,
           >
             <ExternalLink className="mr-1.5 h-3.5 w-3.5" />
             Open
+          </Button>
+        ) : isWebOnly && !isRunning ? (
+          <Button
+            variant="ghost"
+            size="sm"
+            disabled
+          >
+            <ExternalLink className="mr-1.5 h-3.5 w-3.5" />
+            Requires MariaDB
           </Button>
         ) : !service.initialized ? (
           <Button

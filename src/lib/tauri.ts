@@ -1,4 +1,6 @@
 import { invoke } from "@tauri-apps/api/core"
+import { check } from "@tauri-apps/plugin-updater"
+import { relaunch } from "@tauri-apps/plugin-process"
 import type { ServiceInfo } from "@/types/service"
 import type { SystemInfo, AppConfig } from "@/types/config"
 import type { PhpVersion, PhpIniDirective, PhpExtension } from "@/types/php"
@@ -121,8 +123,13 @@ export async function siteCreate(
   documentRoot: string,
   phpVersion: string,
   ssl: boolean,
+  template?: string,
 ): Promise<Site> {
-  return invoke<Site>("site_create", { name, domain, documentRoot, phpVersion, ssl })
+  return invoke<Site>("site_create", { name, domain, documentRoot, phpVersion, ssl, template })
+}
+
+export async function siteSetupTemplate(siteId: string, template: string): Promise<void> {
+  return invoke<void>("site_setup_template", { siteId, template })
 }
 
 export async function siteUpdate(
@@ -251,6 +258,44 @@ export async function logStopTailing(): Promise<void> {
 
 export async function logClearFile(path: string): Promise<void> {
   return invoke<void>("log_clear_file", { path })
+}
+
+// Update commands
+export interface UpdateInfo {
+  version: string
+  body: string | null
+}
+
+export async function checkForUpdate(): Promise<UpdateInfo | null> {
+  const update = await check()
+  if (update) {
+    return {
+      version: update.version,
+      body: update.body ?? null,
+    }
+  }
+  return null
+}
+
+export async function downloadAndInstallUpdate(
+  onProgress?: (downloaded: number, total: number | undefined) => void,
+): Promise<void> {
+  const update = await check()
+  if (!update) throw new Error("No update available")
+
+  let downloaded = 0
+  await update.downloadAndInstall((event) => {
+    if (event.event === "Started") {
+      onProgress?.(0, event.data.contentLength)
+    } else if (event.event === "Progress") {
+      downloaded += event.data.chunkLength
+      onProgress?.(downloaded, undefined)
+    } else if (event.event === "Finished") {
+      onProgress?.(downloaded, downloaded)
+    }
+  })
+
+  await relaunch()
 }
 
 // Settings commands

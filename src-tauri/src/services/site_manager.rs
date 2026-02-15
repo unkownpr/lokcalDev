@@ -16,6 +16,10 @@ pub struct Site {
     pub ssl: bool,
     pub active: bool,
     pub created_at: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub template: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub template_status: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -26,6 +30,7 @@ pub struct CreateSiteRequest {
     pub document_root: String,
     pub php_version: String,
     pub ssl: bool,
+    pub template: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -79,6 +84,7 @@ impl SiteManager {
         let sites_dir = paths::get_sites_dir();
         std::fs::create_dir_all(&sites_dir)?;
 
+        let has_template = req.template.is_some();
         let id = Uuid::new_v4().to_string();
         let site = Site {
             id: id.clone(),
@@ -89,6 +95,8 @@ impl SiteManager {
             ssl: req.ssl,
             active: true,
             created_at: chrono::Utc::now().to_rfc3339(),
+            template_status: if has_template { Some("pending".to_string()) } else { None },
+            template: req.template,
         };
 
         // Save site config
@@ -102,13 +110,24 @@ impl SiteManager {
             std::fs::create_dir_all(doc_root)?;
         }
 
-        // Place default index.php if the directory is empty or has no index file
-        let index_php = doc_root.join("index.php");
-        let index_html = doc_root.join("index.html");
-        if !index_php.exists() && !index_html.exists() {
-            let template = include_str!("../../resources/index.php");
-            std::fs::write(&index_php, template)?;
+        // Place default index.php only for blank sites (no template)
+        if !has_template {
+            let index_php = doc_root.join("index.php");
+            let index_html = doc_root.join("index.html");
+            if !index_php.exists() && !index_html.exists() {
+                let default_page = include_str!("../../resources/index.php");
+                std::fs::write(&index_php, default_page)?;
+            }
         }
+
+        // For Laravel, nginx root should point to {document_root}/public
+        let nginx_root = if site.template.as_deref() == Some("laravel") {
+            let public_dir = doc_root.join("public");
+            std::fs::create_dir_all(&public_dir)?;
+            public_dir.to_string_lossy().to_string()
+        } else {
+            req.document_root.clone()
+        };
 
         // Generate nginx config
         let php_port = utils::php_version_to_port(&req.php_version);
@@ -124,7 +143,7 @@ impl SiteManager {
 
         let nginx_config = NginxConfigGenerator::generate_site_config(
             &req.domain,
-            &req.document_root,
+            &nginx_root,
             php_port,
             req.ssl,
             ssl_cert.as_deref(),
@@ -197,6 +216,16 @@ impl SiteManager {
 
         log::info!("Updated site: {} ({})", site.name, site.domain);
         Ok(site)
+    }
+
+    pub fn update_template_status(id: &str, status: &str) -> Result<(), AppError> {
+        let mut site = Self::get(id)?;
+        site.template_status = Some(status.to_string());
+        let toml_str = toml::to_string_pretty(&site)
+            .map_err(|e| AppError::Config(e.to_string()))?;
+        std::fs::write(Self::get_site_file(id), &toml_str)?;
+        log::info!("Updated template status for site {}: {}", id, status);
+        Ok(())
     }
 
     pub fn delete(id: &str) -> Result<(), AppError> {
