@@ -1,0 +1,228 @@
+use crate::config::paths;
+use crate::error::AppError;
+use crate::services::nginx_config::NginxConfigGenerator;
+use crate::services::utils;
+use serde::{Deserialize, Serialize};
+use uuid::Uuid;
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Site {
+    pub id: String,
+    pub name: String,
+    pub domain: String,
+    pub document_root: String,
+    pub php_version: String,
+    pub ssl: bool,
+    pub active: bool,
+    pub created_at: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CreateSiteRequest {
+    pub name: String,
+    pub domain: String,
+    pub document_root: String,
+    pub php_version: String,
+    pub ssl: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UpdateSiteRequest {
+    pub name: Option<String>,
+    pub domain: Option<String>,
+    pub document_root: Option<String>,
+    pub php_version: Option<String>,
+    pub ssl: Option<bool>,
+    pub active: Option<bool>,
+}
+
+pub struct SiteManager;
+
+impl SiteManager {
+    fn get_site_file(id: &str) -> std::path::PathBuf {
+        paths::get_sites_dir().join(format!("{}.toml", id))
+    }
+
+    pub fn list() -> Result<Vec<Site>, AppError> {
+        let sites_dir = paths::get_sites_dir();
+        std::fs::create_dir_all(&sites_dir)?;
+
+        let mut sites = Vec::new();
+        for entry in std::fs::read_dir(&sites_dir)? {
+            let entry = entry?;
+            let path = entry.path();
+            if path.extension().map(|e| e == "toml").unwrap_or(false) {
+                let content = std::fs::read_to_string(&path)?;
+                if let Ok(site) = toml::from_str::<Site>(&content) {
+                    sites.push(site);
+                }
+            }
+        }
+        sites.sort_by(|a, b| a.name.cmp(&b.name));
+        Ok(sites)
+    }
+
+    pub fn get(id: &str) -> Result<Site, AppError> {
+        let path = Self::get_site_file(id);
+        if !path.exists() {
+            return Err(AppError::NotFound(format!("Site '{}' not found", id)));
+        }
+        let content = std::fs::read_to_string(&path)?;
+        toml::from_str(&content).map_err(|e| AppError::Config(e.to_string()))
+    }
+
+    pub fn create(req: CreateSiteRequest) -> Result<Site, AppError> {
+        // Ensure sites directory exists
+        let sites_dir = paths::get_sites_dir();
+        std::fs::create_dir_all(&sites_dir)?;
+
+        let id = Uuid::new_v4().to_string();
+        let site = Site {
+            id: id.clone(),
+            name: req.name,
+            domain: req.domain.clone(),
+            document_root: req.document_root.clone(),
+            php_version: req.php_version.clone(),
+            ssl: req.ssl,
+            active: true,
+            created_at: chrono::Utc::now().to_rfc3339(),
+        };
+
+        // Save site config
+        let toml_str = toml::to_string_pretty(&site)
+            .map_err(|e| AppError::Config(e.to_string()))?;
+        std::fs::write(Self::get_site_file(&id), &toml_str)?;
+
+        // Create document root if it doesn't exist
+        let doc_root = std::path::Path::new(&req.document_root);
+        if !doc_root.exists() {
+            std::fs::create_dir_all(doc_root)?;
+        }
+
+        // Place default index.php if the directory is empty or has no index file
+        let index_php = doc_root.join("index.php");
+        let index_html = doc_root.join("index.html");
+        if !index_php.exists() && !index_html.exists() {
+            let template = include_str!("../../resources/index.php");
+            std::fs::write(&index_php, template)?;
+        }
+
+        // Generate nginx config
+        let php_port = utils::php_version_to_port(&req.php_version);
+        let ssl_dir = paths::get_ssl_dir();
+        let (ssl_cert, ssl_key) = if req.ssl {
+            (
+                Some(ssl_dir.join(format!("{}.pem", req.domain)).to_string_lossy().to_string()),
+                Some(ssl_dir.join(format!("{}-key.pem", req.domain)).to_string_lossy().to_string()),
+            )
+        } else {
+            (None, None)
+        };
+
+        let nginx_config = NginxConfigGenerator::generate_site_config(
+            &req.domain,
+            &req.document_root,
+            php_port,
+            req.ssl,
+            ssl_cert.as_deref(),
+            ssl_key.as_deref(),
+        );
+        NginxConfigGenerator::write_site_config(&req.domain, &nginx_config)?;
+
+        log::info!("Created site: {} ({})", site.name, site.domain);
+        Ok(site)
+    }
+
+    pub fn update(id: &str, req: UpdateSiteRequest) -> Result<Site, AppError> {
+        let mut site = Self::get(id)?;
+        let old_domain = site.domain.clone();
+
+        if let Some(name) = req.name {
+            site.name = name;
+        }
+        if let Some(domain) = req.domain {
+            site.domain = domain;
+        }
+        if let Some(document_root) = req.document_root {
+            site.document_root = document_root;
+        }
+        if let Some(php_version) = req.php_version {
+            site.php_version = php_version;
+        }
+        if let Some(ssl) = req.ssl {
+            site.ssl = ssl;
+        }
+        if let Some(active) = req.active {
+            site.active = active;
+        }
+
+        // Save updated site
+        let toml_str = toml::to_string_pretty(&site)
+            .map_err(|e| AppError::Config(e.to_string()))?;
+        std::fs::write(Self::get_site_file(id), &toml_str)?;
+
+        // Remove old nginx config if domain changed
+        if old_domain != site.domain {
+            NginxConfigGenerator::remove_site_config(&old_domain)?;
+        }
+
+        // If site is inactive, remove nginx config
+        if !site.active {
+            NginxConfigGenerator::remove_site_config(&site.domain)?;
+        } else {
+            let php_port = utils::php_version_to_port(&site.php_version);
+            let ssl_dir = paths::get_ssl_dir();
+            let (ssl_cert, ssl_key) = if site.ssl {
+                (
+                    Some(ssl_dir.join(format!("{}.pem", site.domain)).to_string_lossy().to_string()),
+                    Some(ssl_dir.join(format!("{}-key.pem", site.domain)).to_string_lossy().to_string()),
+                )
+            } else {
+                (None, None)
+            };
+
+            let nginx_config = NginxConfigGenerator::generate_site_config(
+                &site.domain,
+                &site.document_root,
+                php_port,
+                site.ssl,
+                ssl_cert.as_deref(),
+                ssl_key.as_deref(),
+            );
+            NginxConfigGenerator::write_site_config(&site.domain, &nginx_config)?;
+        }
+
+        log::info!("Updated site: {} ({})", site.name, site.domain);
+        Ok(site)
+    }
+
+    pub fn delete(id: &str) -> Result<(), AppError> {
+        let site = Self::get(id)?;
+
+        // Remove nginx config
+        NginxConfigGenerator::remove_site_config(&site.domain)?;
+
+        // Remove SSL certificate files if they exist
+        let ssl_dir = paths::get_ssl_dir();
+        let cert = ssl_dir.join(format!("{}.pem", site.domain));
+        let key = ssl_dir.join(format!("{}-key.pem", site.domain));
+        if cert.exists() {
+            let _ = std::fs::remove_file(&cert);
+        }
+        if key.exists() {
+            let _ = std::fs::remove_file(&key);
+        }
+
+        // Remove site file
+        let path = Self::get_site_file(id);
+        if path.exists() {
+            std::fs::remove_file(&path)?;
+        }
+
+        log::info!("Deleted site: {} ({})", site.name, site.domain);
+        Ok(())
+    }
+}

@@ -1,0 +1,52 @@
+LokcalDev Source Available License
+Version 1.0, February 2026
+
+Copyright (c) 2026 ssilistre.dev (Semih Silistre). All rights reserved.
+
+TERMS AND CONDITIONS
+
+1. GRANT OF RIGHTS
+
+   You are granted the right to:
+   - View and study the source code for educational and personal purposes
+   - Use the software for personal, non-commercial local development
+   - Submit contributions (bug fixes, features, documentation) via pull requests
+
+2. RESTRICTIONS
+
+   You may NOT:
+   - Redistribute, sublicense, or sell copies of the software
+   - Use the software or its source code for commercial purposes without
+     a separate commercial license from the copyright holder
+   - Create derivative works or competing products based on this software
+   - Remove or alter any copyright notices, license headers, or branding
+   - Host the software as a service (SaaS) for third parties
+
+3. CONTRIBUTIONS
+
+   By submitting a contribution (pull request, patch, or any code) to this
+   project, you agree to transfer all intellectual property rights of your
+   contribution to the copyright holder. The copyright holder may use, license,
+   or relicense contributions at their sole discretion.
+
+4. COMMERCIAL LICENSING
+
+   For commercial use, redistribution rights, or enterprise deployments,
+   contact: hello@ssilistre.dev
+
+5. DISCLAIMER
+
+   THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+   OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+   FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+   COPYRIGHT HOLDER BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
+   WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF
+   OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+   SOFTWARE.
+
+6. TERMINATION
+
+   This license is effective until terminated. Your rights under this license
+   will terminate automatically without notice if you fail to comply with any
+   of its terms. Upon termination, you must destroy all copies of the software
+   in your possession.
