@@ -57,50 +57,31 @@ export const useSiteStore = create<SiteStore>((set, get) => ({
       return
     }
 
-    // Privileged operations (require admin password on macOS)
-    let dnsOk = true
-    let nginxOk = true
-
-    // Add DNS entry
-    try {
-      await tauri.dnsAddEntry(domain, "127.0.0.1")
-    } catch {
-      dnsOk = false
-    }
-
     // Generate SSL certificate if enabled
+    let sslActive = ssl
     if (ssl) {
       try {
         await tauri.sslGenerateCertificate(domain)
-      } catch {}
+      } catch {
+        // SSL cert failed - disable SSL so the site still works
+        sslActive = false
+        try {
+          await tauri.siteUpdate(site.id, undefined, undefined, undefined, undefined, false, undefined)
+        } catch {}
+        toast.warning("SSL certificate could not be generated", {
+          description: "Site created without SSL. Install mkcert + Root CA from SSL page first.",
+        })
+      }
     }
 
     // Reload nginx to pick up new config
     try {
       await tauri.nginxReload()
-    } catch {
-      nginxOk = false
-    }
-
-    // If both privileged operations failed (user likely cancelled), roll back
-    if (!dnsOk && !nginxOk) {
-      try {
-        await tauri.siteDelete(site.id)
-      } catch {}
-      await get().fetchSites()
-      toast.error("Site creation cancelled", {
-        description: "Admin access is required for DNS and Nginx configuration.",
-      })
-      return
-    }
+    } catch {}
 
     await get().fetchSites()
-    if (dnsOk && nginxOk) {
-      toast.success(`Site "${name}" created`, { description: `${ssl ? "https" : "http"}://${domain}` })
-    } else {
-      toast.warning(`Site "${name}" created with warnings`, {
-        description: "Some operations required admin access and were skipped.",
-      })
+    if (sslActive || !ssl) {
+      toast.success(`Site "${name}" created`)
     }
 
     // Fire template setup in background if requested
@@ -135,22 +116,6 @@ export const useSiteStore = create<SiteStore>((set, get) => ({
       return
     }
 
-    let hasWarnings = false
-
-    // Handle domain change: remove old DNS, add new DNS
-    if (data.domain && oldSite && data.domain !== oldSite.domain) {
-      try {
-        await tauri.dnsRemoveEntry(oldSite.domain)
-      } catch {
-        hasWarnings = true
-      }
-      try {
-        await tauri.dnsAddEntry(data.domain, "127.0.0.1")
-      } catch {
-        hasWarnings = true
-      }
-    }
-
     // Handle SSL change - only regenerate cert when SSL was toggled on or domain changed
     const newSsl = data.ssl ?? oldSite?.ssl
     const newDomain = data.domain ?? oldSite?.domain
@@ -159,51 +124,19 @@ export const useSiteStore = create<SiteStore>((set, get) => ({
     if (newSsl && newDomain && (sslToggled || domainChanged)) {
       try {
         await tauri.sslGenerateCertificate(newDomain)
-      } catch {
-        hasWarnings = true
-      }
+      } catch {}
     }
 
     // Reload nginx
     try {
       await tauri.nginxReload()
-    } catch {
-      hasWarnings = true
-    }
+    } catch {}
 
     await get().fetchSites()
-    if (!hasWarnings) {
-      toast.success("Site updated")
-    } else {
-      toast.warning("Site updated with warnings", {
-        description: "Some operations required admin access and were skipped.",
-      })
-    }
+    toast.success("Site updated")
   },
 
   deleteSite: async (id) => {
-    const site = get().sites.find((s) => s.id === id)
-
-    // First, try privileged operations (require admin password on macOS)
-    let dnsOk = true
-    let nginxOk = true
-
-    if (site) {
-      try {
-        await tauri.dnsRemoveEntry(site.domain)
-      } catch {
-        dnsOk = false
-      }
-    }
-
-    // If DNS failed (user cancelled password), skip the rest
-    if (!dnsOk) {
-      toast.error("Site deletion cancelled", {
-        description: "Admin access is required to update DNS and Nginx.",
-      })
-      return
-    }
-
     // Delete site files + nginx config
     try {
       await tauri.siteDelete(id)
@@ -217,18 +150,10 @@ export const useSiteStore = create<SiteStore>((set, get) => ({
     // Reload nginx
     try {
       await tauri.nginxReload()
-    } catch {
-      nginxOk = false
-    }
+    } catch {}
 
     await get().fetchSites()
-    if (nginxOk) {
-      toast.success("Site deleted")
-    } else {
-      toast.warning("Site deleted", {
-        description: "Nginx reload was skipped — admin access required.",
-      })
-    }
+    toast.success("Site deleted")
   },
 
   installNginx: async () => {

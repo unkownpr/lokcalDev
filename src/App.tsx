@@ -9,6 +9,7 @@ import { DatabasePage } from "@/pages/DatabasePage"
 import { SslPage } from "@/pages/SslPage"
 import { LogsPage } from "@/pages/LogsPage"
 import { SettingsPage } from "@/pages/SettingsPage"
+import { AiPage } from "@/pages/AiPage"
 
 function App() {
   return (
@@ -23,6 +24,7 @@ function App() {
           <Route path="ssl" element={<SslPage />} />
           <Route path="logs" element={<LogsPage />} />
           <Route path="settings" element={<SettingsPage />} />
+          <Route path="ai" element={<AiPage />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Route>
       </Routes>

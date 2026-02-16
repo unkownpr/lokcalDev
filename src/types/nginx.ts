@@ -4,6 +4,7 @@ export interface NginxInfo {
   version: string | null
   pid: number | null
   port: number
+  sslPort: number
   configPath: string
 }
 

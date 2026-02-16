@@ -1,4 +1,5 @@
 import { create } from "zustand"
+import { toast } from "sonner"
 import type { SystemInfo } from "@/types/config"
 import * as tauri from "@/lib/tauri"
 
@@ -34,6 +35,9 @@ export const useAppStore = create<AppStore>((set) => ({
       const systemInfo = await tauri.getSystemInfo()
       set({ initialized: true, systemInfo })
 
+      // Ensure dnsmasq is running for .test domain resolution (no password needed)
+      tauri.dnsEnsureDnsmasqRunning("test").catch(() => {})
+
       // Check for updates in background (non-blocking)
       // Pre-check endpoint to avoid Rust-side ERROR logs when no release exists
       fetch("https://github.com/unkownpr/lokcalDev/releases/latest/download/latest.json", { method: "HEAD" })
@@ -67,6 +71,7 @@ export const useAppStore = create<AppStore>((set) => ({
           updateNotes: update.body,
           updateChecking: false,
         })
+        toast.success(`Update available: v${update.version}`)
       } else {
         set({
           updateAvailable: false,
@@ -74,9 +79,11 @@ export const useAppStore = create<AppStore>((set) => ({
           updateNotes: null,
           updateChecking: false,
         })
+        toast.success("You're on the latest version")
       }
     } catch {
       set({ updateChecking: false })
+      toast.error("Could not check for updates")
     }
   },
 

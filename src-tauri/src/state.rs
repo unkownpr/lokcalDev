@@ -38,7 +38,7 @@ impl AppState {
 
         // Only register real services that have actual managers
         let default_services = vec![
-            ("nginx", "Nginx", Some(80u16)),
+            ("nginx", "Nginx", Some(8080u16)),
             ("mariadb", "MariaDB", Some(3306u16)),
             ("phpmyadmin", "phpMyAdmin", None),
         ];

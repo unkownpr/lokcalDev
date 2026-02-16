@@ -10,6 +10,13 @@ export interface DnsEntry {
   ip: string
 }
 
+export interface ResolverStatus {
+  resolverExists: boolean
+  dnsmasqInstalled: boolean
+  dnsmasqRunning: boolean
+  configured: boolean
+}
+
 export interface LogFile {
   name: string
   path: string

@@ -1,6 +1,8 @@
 use crate::config::paths;
 use crate::error::AppError;
+use crate::services::dns_manager::DnsManager;
 use crate::services::nginx_config::NginxConfigGenerator;
+use crate::services::nginx_manager::NginxManager;
 use crate::services::utils;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -141,6 +143,7 @@ impl SiteManager {
             (None, None)
         };
 
+        let nginx_info = NginxManager::get_info();
         let nginx_config = NginxConfigGenerator::generate_site_config(
             &req.domain,
             &nginx_root,
@@ -148,8 +151,13 @@ impl SiteManager {
             req.ssl,
             ssl_cert.as_deref(),
             ssl_key.as_deref(),
+            nginx_info.port,
+            nginx_info.ssl_port,
         );
         NginxConfigGenerator::write_site_config(&req.domain, &nginx_config)?;
+
+        // Add DNS entry for the domain (hosts file fallback when dnsmasq not configured)
+        Self::ensure_dns_entry(&req.domain);
 
         log::info!("Created site: {} ({})", site.name, site.domain);
         Ok(site)
@@ -203,6 +211,7 @@ impl SiteManager {
                 (None, None)
             };
 
+            let nginx_info = NginxManager::get_info();
             let nginx_config = NginxConfigGenerator::generate_site_config(
                 &site.domain,
                 &site.document_root,
@@ -210,6 +219,8 @@ impl SiteManager {
                 site.ssl,
                 ssl_cert.as_deref(),
                 ssl_key.as_deref(),
+                nginx_info.port,
+                nginx_info.ssl_port,
             );
             NginxConfigGenerator::write_site_config(&site.domain, &nginx_config)?;
         }
@@ -225,6 +236,54 @@ impl SiteManager {
             .map_err(|e| AppError::Config(e.to_string()))?;
         std::fs::write(Self::get_site_file(id), &toml_str)?;
         log::info!("Updated template status for site {}: {}", id, status);
+        Ok(())
+    }
+
+    /// Regenerate nginx configs for ALL active sites.
+    /// Called on nginx start to ensure configs match current settings (ports, etc.).
+    pub fn regenerate_all_configs() -> Result<(), AppError> {
+        let sites = Self::list()?;
+        let nginx_info = NginxManager::get_info();
+        let ssl_dir = paths::get_ssl_dir();
+
+        for site in &sites {
+            if !site.active {
+                continue;
+            }
+
+            let php_port = utils::php_version_to_port(&site.php_version);
+
+            // For Laravel, nginx root should point to {document_root}/public
+            let nginx_root = if site.template.as_deref() == Some("laravel") {
+                let public_dir = std::path::Path::new(&site.document_root).join("public");
+                public_dir.to_string_lossy().to_string()
+            } else {
+                site.document_root.clone()
+            };
+
+            let (ssl_cert, ssl_key) = if site.ssl {
+                (
+                    Some(ssl_dir.join(format!("{}.pem", site.domain)).to_string_lossy().to_string()),
+                    Some(ssl_dir.join(format!("{}-key.pem", site.domain)).to_string_lossy().to_string()),
+                )
+            } else {
+                (None, None)
+            };
+
+            let config = NginxConfigGenerator::generate_site_config(
+                &site.domain,
+                &nginx_root,
+                php_port,
+                site.ssl,
+                ssl_cert.as_deref(),
+                ssl_key.as_deref(),
+                nginx_info.port,
+                nginx_info.ssl_port,
+            );
+            let _ = NginxConfigGenerator::write_site_config(&site.domain, &config);
+        }
+
+        log::info!("Regenerated nginx configs for all active sites");
         Ok(())
     }
 
@@ -245,6 +304,9 @@ impl SiteManager {
             let _ = std::fs::remove_file(&key);
         }
 
+        // Remove DNS entry
+        Self::remove_dns_entry(&site.domain);
+
         // Remove site file
         let path = Self::get_site_file(id);
         if path.exists() {
@@ -253,5 +315,37 @@ impl SiteManager {
 
         log::info!("Deleted site: {} ({})", site.name, site.domain);
         Ok(())
+    }
+
+    /// Add DNS entry for a domain.
+    /// On macOS: skip if dnsmasq resolver is configured (handles all .test domains).
+    /// On Windows/other: always add to hosts file.
+    fn ensure_dns_entry(domain: &str) {
+        #[cfg(target_os = "macos")]
+        {
+            // Extract TLD from domain (e.g. "test" from "mysite.test")
+            let tld = domain.rsplit('.').next().unwrap_or("");
+            let status = DnsManager::get_resolver_status(tld);
+            if status.configured {
+                return; // dnsmasq handles it
+            }
+        }
+
+        // Fallback: add to hosts file (may need admin on macOS/Windows)
+        let _ = DnsManager::add_entry(domain, "127.0.0.1");
+    }
+
+    /// Remove DNS entry for a domain.
+    fn remove_dns_entry(domain: &str) {
+        #[cfg(target_os = "macos")]
+        {
+            let tld = domain.rsplit('.').next().unwrap_or("");
+            let status = DnsManager::get_resolver_status(tld);
+            if status.configured {
+                return; // dnsmasq handles it
+            }
+        }
+
+        let _ = DnsManager::remove_entry(domain);
     }
 }

@@ -15,6 +15,7 @@ pub struct NginxInfo {
     pub version: Option<String>,
     pub pid: Option<u32>,
     pub port: u16,
+    pub ssl_port: u16,
     pub config_path: String,
 }
 
@@ -70,6 +71,29 @@ impl NginxManager {
                 Some(message.to_string()),
             ),
         );
+    }
+
+    /// Remove root-owned log/pid files so non-privileged nginx can write them.
+    fn fix_log_permissions() {
+        let log_dir = Self::get_log_dir();
+        let _ = std::fs::create_dir_all(&log_dir);
+        // Check ALL files in logs dir (nginx + site-specific logs)
+        if let Ok(entries) = std::fs::read_dir(&log_dir) {
+            for entry in entries.flatten() {
+                let path = entry.path();
+                if path.is_file() {
+                    if std::fs::OpenOptions::new().write(true).open(&path).is_err() {
+                        let _ = std::fs::remove_file(&path);
+                    }
+                }
+            }
+        }
+        let pid_path = Self::get_pid_path();
+        if pid_path.exists() {
+            if std::fs::OpenOptions::new().write(true).open(&pid_path).is_err() {
+                let _ = std::fs::remove_file(&pid_path);
+            }
+        }
     }
 
     fn detect_version() -> Option<String> {
@@ -168,6 +192,20 @@ impl NginxManager {
         Err(AppError::Service("Nginx install not supported on this platform yet".to_string()))
     }
 
+    // ── read configured port ────────────────────────────────────────
+
+    fn read_configured_ports() -> (u16, u16) {
+        let settings_path = crate::config::paths::get_config_dir().join("settings.toml");
+        if settings_path.exists() {
+            if let Ok(content) = std::fs::read_to_string(&settings_path) {
+                if let Ok(config) = toml::from_str::<crate::config::app_config::AppConfig>(&content) {
+                    return (config.nginx_port, config.nginx_ssl_port);
+                }
+            }
+        }
+        (8080, 8443)
+    }
+
     // ── get_info ────────────────────────────────────────────────────
 
     pub fn get_info() -> NginxInfo {
@@ -180,83 +218,36 @@ impl NginxManager {
             (false, None)
         };
 
+        let (port, ssl_port) = Self::read_configured_ports();
         NginxInfo {
             installed,
             running,
             version: if installed { Self::detect_version() } else { None },
             pid,
-            port: 80,
+            port,
+            ssl_port,
             config_path: Self::get_config_path().to_string_lossy().to_string(),
         }
-    }
-
-    // ── privileged command helper (macOS) ──────────────────────────
-
-    #[cfg(target_os = "macos")]
-    fn run_privileged(cmd: &str) -> Result<(), AppError> {
-        let escaped = cmd.replace('\\', "\\\\").replace('"', "\\\"");
-        let script = format!(
-            "do shell script \"{}\" with administrator privileges",
-            escaped
-        );
-        let output = Command::new("osascript")
-            .current_dir("/tmp")
-            .args(["-e", &script])
-            .output()
-            .map_err(|e| AppError::Process(format!("Failed to run privileged command: {}", e)))?;
-
-        if !output.status.success() {
-            let stderr = String::from_utf8_lossy(&output.stderr);
-            return Err(AppError::Process(stderr.trim().to_string()));
-        }
-        Ok(())
-    }
-
-    /// Get current username for nginx user directive
-    fn get_current_username() -> String {
-        std::env::var("USER")
-            .or_else(|_| std::env::var("USERNAME"))
-            .unwrap_or_else(|_| "nobody".to_string())
-    }
-
-    /// Get current user's primary group
-    fn get_current_groupname() -> String {
-        #[cfg(unix)]
-        {
-            Command::new("id")
-                .arg("-gn")
-                .output()
-                .ok()
-                .and_then(|o| {
-                    if o.status.success() {
-                        Some(String::from_utf8_lossy(&o.stdout).trim().to_string())
-                    } else {
-                        None
-                    }
-                })
-                .unwrap_or_else(|| "staff".to_string())
-        }
-        #[cfg(not(unix))]
-        {
-            "nogroup".to_string()
-        }
-    }
-
-    /// Quote a path for shell usage (handles spaces)
-    fn shell_quote(path: &std::path::Path) -> String {
-        format!("'{}'", path.to_string_lossy().replace('\'', "'\\''"))
     }
 
     // ── start ───────────────────────────────────────────────────────
 
     pub fn start() -> Result<u32, AppError> {
+        use crate::services::site_manager::SiteManager;
+
         let binary = Self::get_nginx_binary();
         if !binary.exists() {
             return Err(AppError::NotFound("Nginx is not installed".to_string()));
         }
 
-        // Always ensure config is up to date (adds user directive, PHP support, etc.)
+        // Ensure log files are writable (may be root-owned from previous port-80 era)
+        Self::fix_log_permissions();
+
+        // Always ensure config is up to date
         let config_changed = Self::ensure_config()?;
+
+        // Regenerate all site configs to match current port settings
+        let _ = SiteManager::regenerate_all_configs();
 
         // If nginx is already running, reload if config changed, then return existing PID
         let current = Self::get_info();
@@ -273,30 +264,15 @@ impl NginxManager {
 
         let config = Self::get_config_path();
 
-        // On macOS, port 80 requires root — start as daemon with admin privileges
-        #[cfg(target_os = "macos")]
-        {
-            let cmd = format!(
-                "{} -c {}",
-                Self::shell_quote(&binary),
-                Self::shell_quote(&config)
-            );
-            Self::run_privileged(&cmd)?;
-        }
+        let output = Command::new(&binary)
+            .arg("-c")
+            .arg(&config)
+            .output()
+            .map_err(|e| AppError::Process(format!("Failed to start Nginx: {}", e)))?;
 
-        // On other platforms, start normally as daemon
-        #[cfg(not(target_os = "macos"))]
-        {
-            let output = Command::new(&binary)
-                .arg("-c")
-                .arg(&config)
-                .output()
-                .map_err(|e| AppError::Process(format!("Failed to start Nginx: {}", e)))?;
-
-            if !output.status.success() {
-                let stderr = String::from_utf8_lossy(&output.stderr);
-                return Err(AppError::Process(format!("Failed to start Nginx: {}", stderr)));
-            }
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            return Err(AppError::Process(format!("Failed to start Nginx: {}", stderr)));
         }
 
         // Wait for PID file
@@ -319,27 +295,12 @@ impl NginxManager {
         let config = Self::get_config_path();
 
         if binary.exists() && config.exists() {
-            let cmd = format!(
-                "{} -c {} -s stop",
-                Self::shell_quote(&binary),
-                Self::shell_quote(&config)
-            );
-
-            #[cfg(target_os = "macos")]
-            {
-                // nginx master runs as root, need admin to stop
-                let _ = Self::run_privileged(&cmd);
-            }
-
-            #[cfg(not(target_os = "macos"))]
-            {
-                let _ = Command::new(&binary)
-                    .arg("-c")
-                    .arg(&config)
-                    .arg("-s")
-                    .arg("stop")
-                    .output();
-            }
+            let _ = Command::new(&binary)
+                .arg("-c")
+                .arg(&config)
+                .arg("-s")
+                .arg("stop")
+                .output();
         }
 
         let pid_path = Self::get_pid_path();
@@ -360,33 +321,19 @@ impl NginxManager {
         }
         let config = Self::get_config_path();
 
-        let cmd = format!(
-            "{} -c {} -s reload",
-            Self::shell_quote(&binary),
-            Self::shell_quote(&config)
-        );
+        let output = Command::new(&binary)
+            .arg("-c")
+            .arg(&config)
+            .arg("-s")
+            .arg("reload")
+            .output()
+            .map_err(|e| AppError::Process(format!("Failed to reload Nginx: {}", e)))?;
 
-        #[cfg(target_os = "macos")]
-        {
-            Self::run_privileged(&cmd)?;
-        }
-
-        #[cfg(not(target_os = "macos"))]
-        {
-            let output = Command::new(&binary)
-                .arg("-c")
-                .arg(&config)
-                .arg("-s")
-                .arg("reload")
-                .output()
-                .map_err(|e| AppError::Process(format!("Failed to reload Nginx: {}", e)))?;
-
-            if !output.status.success() {
-                return Err(AppError::Process(format!(
-                    "Nginx reload failed: {}",
-                    String::from_utf8_lossy(&output.stderr)
-                )));
-            }
+        if !output.status.success() {
+            return Err(AppError::Process(format!(
+                "Nginx reload failed: {}",
+                String::from_utf8_lossy(&output.stderr)
+            )));
         }
 
         log::info!("Nginx reloaded");
@@ -495,8 +442,8 @@ impl NginxManager {
         std::fs::create_dir_all(config_dir.join("sites-enabled"))?;
 
         let config_path = Self::get_config_path();
-        // Regenerate config if missing, lacks PHP support, lacks user directive,
-        // or phpMyAdmin installation state changed
+        // Regenerate config if missing, has stale user directive,
+        // PHP port changed, or phpMyAdmin installation state changed
         let pma_installed = paths::get_phpmyadmin_dir().join("index.php").exists();
         let active_php_port = Self::detect_php_fpm_port();
         let needs_config = if config_path.exists() {
@@ -504,7 +451,7 @@ impl NginxManager {
             let has_pma = existing.contains("^~ /phpmyadmin");
             let current_port_str = format!("fastcgi_pass 127.0.0.1:{}", active_php_port);
             !existing.contains("fastcgi_pass")
-                || !existing.contains("\nuser ")
+                || existing.contains("\nuser ")
                 || pma_installed != has_pma
                 || !existing.contains(&current_port_str)
         } else {
@@ -516,16 +463,12 @@ impl NginxManager {
             let www_dir = paths::get_data_dir().join("www");
             std::fs::create_dir_all(&www_dir)?;
 
-            // Detect current user/group so nginx workers can access user directories
-            let username = Self::get_current_username();
-            let groupname = Self::get_current_groupname();
-
-            // Detect active PHP-FPM port
+            // Detect active PHP-FPM port and configured listen port
             let php_port = Self::detect_php_fpm_port();
+            let (listen_port, _ssl_port) = Self::read_configured_ports();
 
             let content = format!(
-                r#"user {username} {groupname};
-worker_processes auto;
+                r#"worker_processes auto;
 pid "{pid}";
 error_log "{error_log}" warn;
 
@@ -551,7 +494,7 @@ http {{
     include "{sites_enabled}/*.conf";
 
     server {{
-        listen 80 default_server;
+        listen {listen_port} default_server;
         server_name localhost;
         root "{default_root}";
         index index.php index.html index.htm;
@@ -573,8 +516,7 @@ http {{
     }}
 }}
 "#,
-                username = username,
-                groupname = groupname,
+                listen_port = listen_port,
                 php_port = php_port,
                 phpmyadmin_location = Self::get_phpmyadmin_location_block(php_port),
                 pid = utils::to_forward_slash(&pid_path),

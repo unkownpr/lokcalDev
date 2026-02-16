@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react"
-import { Shield, Trash2, CheckCircle2, XCircle, Download } from "lucide-react"
+import { Shield, Trash2, CheckCircle2, XCircle, Download, Loader2, Wifi } from "lucide-react"
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -14,7 +14,9 @@ export function SslPage() {
     caInstalled,
     certificates,
     dnsEntries,
+    resolverStatus,
     loading,
+    resolverLoading,
     checkStatus,
     installMkcert,
     installCa,
@@ -24,6 +26,7 @@ export function SslPage() {
     addDnsEntry,
     removeDnsEntry,
     fetchDnsEntries,
+    fetchResolverStatus,
     setupResolver,
   } = useSslStore()
 
@@ -35,18 +38,150 @@ export function SslPage() {
     checkStatus()
     fetchCertificates()
     fetchDnsEntries()
-  }, [checkStatus, fetchCertificates, fetchDnsEntries])
+    fetchResolverStatus()
+  }, [checkStatus, fetchCertificates, fetchDnsEntries, fetchResolverStatus])
 
   return (
     <div>
       <PageHeader title="SSL" description="Manage SSL certificates and DNS for local sites" />
 
-      <Tabs defaultValue="setup">
+      <Tabs defaultValue="dns">
         <TabsList>
-          <TabsTrigger value="setup">Setup</TabsTrigger>
-          <TabsTrigger value="certificates">Certificates</TabsTrigger>
           <TabsTrigger value="dns">DNS</TabsTrigger>
+          <TabsTrigger value="setup">SSL Setup</TabsTrigger>
+          <TabsTrigger value="certificates">Certificates</TabsTrigger>
         </TabsList>
+
+        <TabsContent value="dns" className="mt-4 space-y-4">
+          {/* Auto DNS Resolver Card */}
+          <Card className="p-4">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <Wifi className="h-4 w-4 text-muted-foreground" />
+                <div>
+                  <p className="text-sm font-medium">Auto DNS Resolver</p>
+                  <p className="text-xs text-muted-foreground">
+                    Automatically resolve all .test domains to 127.0.0.1 via dnsmasq
+                  </p>
+                </div>
+              </div>
+              <Badge variant={resolverStatus?.configured ? "default" : "secondary"}>
+                {resolverStatus?.configured ? "Active" : "Not Configured"}
+              </Badge>
+            </div>
+
+            {resolverStatus?.configured ? (
+              <div className="text-xs text-muted-foreground space-y-0.5">
+                <p>All .test domains automatically resolve to 127.0.0.1</p>
+                <p>No need to manually add DNS entries for .test sites.</p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                <p className="text-xs text-muted-foreground">
+                  Setup dnsmasq to auto-resolve all .test domains. This is a one-time setup
+                  that requires your password once. After that, all .test sites work automatically
+                  without any password prompts.
+                </p>
+
+                {resolverStatus && !resolverStatus.configured && (
+                  <div className="text-xs text-muted-foreground space-y-0.5">
+                    {resolverStatus.dnsmasqInstalled ? (
+                      <p className="flex items-center gap-1"><CheckCircle2 className="h-3 w-3 text-emerald-500" /> dnsmasq installed</p>
+                    ) : (
+                      <p className="flex items-center gap-1"><XCircle className="h-3 w-3" /> dnsmasq not installed (will be installed via Homebrew)</p>
+                    )}
+                    {resolverStatus.dnsmasqRunning ? (
+                      <p className="flex items-center gap-1"><CheckCircle2 className="h-3 w-3 text-emerald-500" /> dnsmasq running</p>
+                    ) : (
+                      <p className="flex items-center gap-1"><XCircle className="h-3 w-3" /> dnsmasq not running</p>
+                    )}
+                    {resolverStatus.resolverExists ? (
+                      <p className="flex items-center gap-1"><CheckCircle2 className="h-3 w-3 text-emerald-500" /> Resolver file exists</p>
+                    ) : (
+                      <p className="flex items-center gap-1"><XCircle className="h-3 w-3" /> Resolver file missing</p>
+                    )}
+                  </div>
+                )}
+
+                <Button
+                  size="sm"
+                  onClick={() => setupResolver("test")}
+                  disabled={resolverLoading}
+                >
+                  {resolverLoading ? (
+                    <>
+                      <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                      Setting up...
+                    </>
+                  ) : (
+                    "Setup Auto DNS Resolver"
+                  )}
+                </Button>
+              </div>
+            )}
+          </Card>
+
+          {/* Manual DNS Entry */}
+          <Card className="p-4">
+            <h3 className="text-sm font-medium mb-3">Manual DNS Entry</h3>
+            <p className="text-xs text-muted-foreground mb-3">
+              Add individual entries to /etc/hosts. Not needed if Auto DNS Resolver is active for .test domains.
+            </p>
+            <div className="flex gap-2">
+              <Input
+                placeholder="mysite.test"
+                value={dnsDomain}
+                onChange={(e) => setDnsDomain(e.target.value)}
+                className="flex-1"
+              />
+              <Input
+                placeholder="127.0.0.1"
+                value={dnsIp}
+                onChange={(e) => setDnsIp(e.target.value)}
+                className="w-36"
+              />
+              <Button
+                size="sm"
+                onClick={() => {
+                  if (dnsDomain && dnsIp) {
+                    addDnsEntry(dnsDomain, dnsIp)
+                    setDnsDomain("")
+                  }
+                }}
+                disabled={!dnsDomain || !dnsIp}
+              >
+                Add
+              </Button>
+            </div>
+          </Card>
+
+          {dnsEntries.length > 0 && (
+            <div>
+              <h3 className="text-sm font-medium mb-3">DNS Entries (/etc/hosts)</h3>
+              <div className="space-y-1">
+                {dnsEntries.map((entry) => (
+                  <div
+                    key={entry.domain}
+                    className="flex items-center justify-between py-2 px-3 rounded hover:bg-muted/50"
+                  >
+                    <div className="flex items-center gap-3">
+                      <span className="text-sm font-mono">{entry.domain}</span>
+                      <span className="text-xs text-muted-foreground">{entry.ip}</span>
+                    </div>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="text-destructive h-7"
+                      onClick={() => removeDnsEntry(entry.domain)}
+                    >
+                      <Trash2 className="h-3 w-3" />
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </TabsContent>
 
         <TabsContent value="setup" className="mt-4 space-y-4">
           <Card className="p-4">
@@ -140,70 +275,6 @@ export function SslPage() {
                     variant="ghost"
                     className="text-destructive h-7"
                     onClick={() => removeCertificate(cert.domain)}
-                  >
-                    <Trash2 className="h-3 w-3" />
-                  </Button>
-                </div>
-              ))}
-            </div>
-          )}
-        </TabsContent>
-
-        <TabsContent value="dns" className="mt-4">
-          <Card className="p-4 mb-4">
-            <h3 className="text-sm font-medium mb-3">Add DNS Entry</h3>
-            <div className="flex gap-2">
-              <Input
-                placeholder="mysite.test"
-                value={dnsDomain}
-                onChange={(e) => setDnsDomain(e.target.value)}
-                className="flex-1"
-              />
-              <Input
-                placeholder="127.0.0.1"
-                value={dnsIp}
-                onChange={(e) => setDnsIp(e.target.value)}
-                className="w-36"
-              />
-              <Button
-                size="sm"
-                onClick={() => {
-                  if (dnsDomain && dnsIp) {
-                    addDnsEntry(dnsDomain, dnsIp)
-                    setDnsDomain("")
-                  }
-                }}
-                disabled={!dnsDomain || !dnsIp}
-              >
-                Add
-              </Button>
-            </div>
-          </Card>
-
-          <div className="mb-4">
-            <Button size="sm" variant="outline" onClick={() => setupResolver("test")}>
-              Setup .test Resolver (macOS)
-            </Button>
-          </div>
-
-          {dnsEntries.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No DNS entries configured.</p>
-          ) : (
-            <div className="space-y-1">
-              {dnsEntries.map((entry) => (
-                <div
-                  key={entry.domain}
-                  className="flex items-center justify-between py-2 px-3 rounded hover:bg-muted/50"
-                >
-                  <div className="flex items-center gap-3">
-                    <span className="text-sm font-mono">{entry.domain}</span>
-                    <span className="text-xs text-muted-foreground">{entry.ip}</span>
-                  </div>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    className="text-destructive h-7"
-                    onClick={() => removeDnsEntry(entry.domain)}
                   >
                     <Trash2 className="h-3 w-3" />
                   </Button>

@@ -282,6 +282,7 @@ impl MariaDbManager {
         let output = {
             Command::new(&install_db)
                 .arg("--no-defaults")
+                .arg(format!("--basedir={}", utils::to_forward_slash(&base_dir)))
                 .arg(format!("--datadir={}", utils::to_forward_slash(&data_dir)))
                 .stdout(Stdio::piped())
                 .stderr(Stdio::piped())

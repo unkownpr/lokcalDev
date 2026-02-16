@@ -8,6 +8,7 @@ import {
   Shield,
   ScrollText,
   Settings,
+  Bot,
   Github,
   ExternalLink,
 } from "lucide-react"
@@ -27,6 +28,7 @@ const iconMap = {
   Shield,
   ScrollText,
   Settings,
+  Bot,
 } as const
 
 const navItems = [
@@ -37,6 +39,7 @@ const navItems = [
   { path: "/database", label: "Database", icon: "Database" as const },
   { path: "/ssl", label: "SSL", icon: "Shield" as const },
   { path: "/logs", label: "Logs", icon: "ScrollText" as const },
+  { path: "/ai", label: "AI Assistant", icon: "Bot" as const },
   { path: "/settings", label: "Settings", icon: "Settings" as const },
 ]
 

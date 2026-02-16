@@ -13,6 +13,7 @@ pub fn get_all_services(state: State<'_, AppState>) -> Result<Vec<ServiceInfo>, 
     let nginx_info = NginxManager::get_info();
     let mariadb_info = MariaDbManager::get_info();
     let pma_info = PhpMyAdminManager::get_info();
+    let php_versions = PhpManager::list_versions();
 
     let mut services = state
         .services
@@ -59,6 +60,44 @@ pub fn get_all_services(state: State<'_, AppState>) -> Result<Vec<ServiceInfo>, 
         };
     }
 
+    // Update PHP-FPM services for all installed versions
+    for php in &php_versions {
+        if !php.installed {
+            continue;
+        }
+        let key = format!("php-fpm-{}", php.version);
+        let svc = services.entry(key.clone()).or_insert_with(|| ServiceInfo {
+            id: key.clone(),
+            name: format!("PHP-FPM {}", php.version),
+            status: ServiceStatus::Stopped,
+            port: Some(php.port),
+            version: Some(php.version.clone()),
+            pid: None,
+            installed: true,
+            initialized: true,
+        });
+        svc.installed = true;
+        svc.port = Some(php.port);
+        svc.version = Some(php.version.clone());
+        if php.running {
+            svc.status = ServiceStatus::Running;
+            svc.pid = php.pid;
+        } else {
+            svc.status = ServiceStatus::Stopped;
+            svc.pid = None;
+        }
+    }
+
+    // Remove PHP-FPM entries for uninstalled versions
+    let installed_keys: Vec<String> = php_versions
+        .iter()
+        .filter(|p| p.installed)
+        .map(|p| format!("php-fpm-{}", p.version))
+        .collect();
+    services.retain(|k, _| {
+        !k.starts_with("php-fpm-") || installed_keys.contains(k)
+    });
+
     let mut result: Vec<ServiceInfo> = services.values().cloned().collect();
     result.sort_by(|a, b| a.name.cmp(&b.name));
     Ok(result)
@@ -93,7 +132,7 @@ pub fn start_service(
                 id: "nginx".to_string(),
                 name: "Nginx".to_string(),
                 status: ServiceStatus::Running,
-                port: Some(80),
+                port: Some(nginx_info.port),
                 version: nginx_info.version,
                 pid: if pid > 0 { Some(pid) } else { nginx_info.pid },
                 installed: true,
@@ -198,14 +237,15 @@ pub fn stop_service(
 ) -> Result<ServiceInfo, AppError> {
     match service_id.as_str() {
         "nginx" => {
+            let nginx_info = NginxManager::get_info();
             NginxManager::stop()?;
 
             let info = ServiceInfo {
                 id: "nginx".to_string(),
                 name: "Nginx".to_string(),
                 status: ServiceStatus::Stopped,
-                port: Some(80),
-                version: NginxManager::get_info().version,
+                port: Some(nginx_info.port),
+                version: nginx_info.version,
                 pid: None,
                 installed: true,
                 initialized: true,

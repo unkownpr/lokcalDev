@@ -1,6 +1,6 @@
 import { create } from "zustand"
 import { toast } from "sonner"
-import type { CertificateInfo, DnsEntry } from "@/types/ssl"
+import type { CertificateInfo, DnsEntry, ResolverStatus } from "@/types/ssl"
 import * as tauri from "@/lib/tauri"
 
 interface SslStore {
@@ -8,7 +8,9 @@ interface SslStore {
   caInstalled: boolean
   certificates: CertificateInfo[]
   dnsEntries: DnsEntry[]
+  resolverStatus: ResolverStatus | null
   loading: boolean
+  resolverLoading: boolean
   error: string | null
   checkStatus: () => Promise<void>
   installMkcert: () => Promise<void>
@@ -19,6 +21,7 @@ interface SslStore {
   addDnsEntry: (domain: string, ip: string) => Promise<void>
   removeDnsEntry: (domain: string) => Promise<void>
   fetchDnsEntries: () => Promise<void>
+  fetchResolverStatus: () => Promise<void>
   setupResolver: (tld: string) => Promise<void>
 }
 
@@ -27,7 +30,9 @@ export const useSslStore = create<SslStore>((set, get) => ({
   caInstalled: false,
   certificates: [],
   dnsEntries: [],
+  resolverStatus: null,
   loading: false,
+  resolverLoading: false,
   error: null,
 
   checkStatus: async () => {
@@ -119,11 +124,27 @@ export const useSslStore = create<SslStore>((set, get) => ({
     }
   },
 
-  setupResolver: async (tld: string) => {
+  fetchResolverStatus: async () => {
     try {
-      await tauri.dnsSetupResolver(tld)
+      const resolverStatus = await tauri.dnsGetResolverStatus("test")
+      set({ resolverStatus })
     } catch (err) {
       set({ error: String(err) })
+    }
+  },
+
+  setupResolver: async (tld: string) => {
+    set({ resolverLoading: true })
+    try {
+      await tauri.dnsSetupResolver(tld)
+      await get().fetchResolverStatus()
+      set({ resolverLoading: false })
+      toast.success("DNS resolver configured", {
+        description: `All .${tld} domains now resolve to 127.0.0.1 automatically.`,
+      })
+    } catch (err) {
+      set({ error: String(err), resolverLoading: false })
+      toast.error("Failed to setup DNS resolver", { description: String(err) })
     }
   },
 }))

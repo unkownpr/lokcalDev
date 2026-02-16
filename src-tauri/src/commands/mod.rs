@@ -8,3 +8,4 @@ pub mod ssl_commands;
 pub mod log_commands;
 pub mod settings_commands;
 pub mod phpmyadmin_commands;
+pub mod ai_commands;

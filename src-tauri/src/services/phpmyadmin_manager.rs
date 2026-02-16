@@ -117,6 +117,7 @@ impl PhpMyAdminManager {
                 } else {
                     (None, None)
                 };
+                let nginx_info = NginxManager::get_info();
                 let config = NginxConfigGenerator::generate_site_config(
                     &site.domain,
                     &site.document_root,
@@ -124,6 +125,8 @@ impl PhpMyAdminManager {
                     site.ssl,
                     ssl_cert.as_deref(),
                     ssl_key.as_deref(),
+                    nginx_info.port,
+                    nginx_info.ssl_port,
                 );
                 let _ = NginxConfigGenerator::write_site_config(&site.domain, &config);
             }

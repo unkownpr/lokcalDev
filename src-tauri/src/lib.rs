@@ -161,6 +161,8 @@ pub fn run() {
             commands::ssl_commands::dns_add_entry,
             commands::ssl_commands::dns_remove_entry,
             commands::ssl_commands::dns_list_entries,
+            commands::ssl_commands::dns_get_resolver_status,
+            commands::ssl_commands::dns_ensure_dnsmasq_running,
             commands::ssl_commands::dns_setup_resolver,
             // Log commands
             commands::log_commands::log_list_files,
@@ -175,6 +177,10 @@ pub fn run() {
             // phpMyAdmin commands
             commands::phpmyadmin_commands::phpmyadmin_install,
             commands::phpmyadmin_commands::phpmyadmin_get_info,
+            // AI commands
+            commands::ai_commands::ai_fetch_models,
+            commands::ai_commands::ai_chat,
+            commands::ai_commands::ai_execute_tool,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application");

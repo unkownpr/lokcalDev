@@ -9,3 +9,4 @@ pub mod ssl_manager;
 pub mod dns_manager;
 pub mod phpmyadmin_manager;
 pub mod template_manager;
+pub mod ai_service;

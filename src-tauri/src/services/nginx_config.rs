@@ -12,6 +12,8 @@ impl NginxConfigGenerator {
         ssl: bool,
         ssl_cert: Option<&str>,
         ssl_key: Option<&str>,
+        listen_port: u16,
+        ssl_port: u16,
     ) -> String {
         let fastcgi_params_path = paths::get_nginx_config_dir().join("fastcgi_params");
         let log_dir = paths::get_logs_dir();
@@ -24,12 +26,17 @@ impl NginxConfigGenerator {
         let mut config = String::new();
 
         if ssl {
-            // HTTP -> HTTPS redirect
+            // HTTP -> HTTPS redirect (include port for non-standard SSL ports)
+            let redirect_target = if ssl_port == 443 {
+                "return 301 https://$host$request_uri;".to_string()
+            } else {
+                format!("return 301 https://$host:{}$request_uri;", ssl_port)
+            };
             config.push_str(&format!(
                 r#"server {{
-    listen 80;
+    listen {listen_port};
     server_name {domain};
-    return 301 https://$host$request_uri;
+    {redirect_target}
 }}
 
 "#
@@ -38,7 +45,7 @@ impl NginxConfigGenerator {
 
         config.push_str(&format!(
             "server {{\n    listen {};\n    server_name {};\n",
-            if ssl { "443 ssl" } else { "80" },
+            if ssl { format!("{} ssl", ssl_port) } else { listen_port.to_string() },
             domain,
         ));
 

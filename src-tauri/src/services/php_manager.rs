@@ -350,23 +350,41 @@ impl PhpManager {
             )));
         }
 
-        // Ensure we have a custom pool config with our port
-        Self::ensure_fpm_pool_config(version)?;
+        let port = utils::php_version_to_port(version);
 
-        let lokcaldev_conf = paths::get_data_dir()
-            .join("config")
-            .join(format!("php-fpm-{}.conf", version));
+        #[cfg(target_os = "windows")]
+        let child = {
+            // Windows: php-cgi.exe in FastCGI mode bound to a port
+            Command::new(&fpm_bin)
+                .arg("-b")
+                .arg(format!("127.0.0.1:{}", port))
+                .stdout(Stdio::null())
+                .stderr(Stdio::null())
+                .spawn()
+                .map_err(|e| {
+                    AppError::Process(format!("Failed to start PHP-CGI {}: {}", version, e))
+                })?
+        };
 
-        let child = Command::new(&fpm_bin)
-            .arg("--fpm-config")
-            .arg(&lokcaldev_conf)
-            .arg("--nodaemonize")
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .spawn()
-            .map_err(|e| {
-                AppError::Process(format!("Failed to start PHP-FPM {}: {}", version, e))
-            })?;
+        #[cfg(not(target_os = "windows"))]
+        let child = {
+            // Unix: php-fpm with custom config
+            Self::ensure_fpm_pool_config(version)?;
+            let lokcaldev_conf = paths::get_data_dir()
+                .join("config")
+                .join(format!("php-fpm-{}.conf", version));
+
+            Command::new(&fpm_bin)
+                .arg("--fpm-config")
+                .arg(&lokcaldev_conf)
+                .arg("--nodaemonize")
+                .stdout(Stdio::null())
+                .stderr(Stdio::null())
+                .spawn()
+                .map_err(|e| {
+                    AppError::Process(format!("Failed to start PHP-FPM {}: {}", version, e))
+                })?
+        };
 
         let pid = child.id();
 
@@ -377,7 +395,7 @@ impl PhpManager {
         log::info!(
             "Started PHP-FPM {} on port {} (PID: {})",
             version,
-            utils::php_version_to_port(version),
+            port,
             pid
         );
         Ok((child, pid))

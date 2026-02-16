@@ -17,6 +17,7 @@ import { DownloadButton } from "@/components/shared/DownloadButton"
 import { StatusIndicator } from "@/components/layout/StatusIndicator"
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog"
 import { useDatabaseStore } from "@/stores/databaseStore"
+import { useSiteStore } from "@/stores/siteStore"
 import { useDownloadProgress } from "@/hooks/useDownloadProgress"
 import { toast } from "sonner"
 import type { PhpMyAdminInfo } from "@/types/database"
@@ -38,6 +39,7 @@ export function DatabasePage() {
     dropDatabase,
   } = useDatabaseStore()
 
+  const { nginxInfo, fetchNginxInfo } = useSiteStore()
   const progress = useDownloadProgress()
   const [newDbName, setNewDbName] = useState("")
   const [dialogOpen, setDialogOpen] = useState(false)
@@ -55,8 +57,9 @@ export function DatabasePage() {
 
   useEffect(() => {
     fetchInfo()
+    fetchNginxInfo()
     fetchPmaInfo()
-  }, [fetchInfo])
+  }, [fetchInfo, fetchNginxInfo])
 
   useEffect(() => {
     if (info?.running) {
@@ -179,7 +182,7 @@ export function DatabasePage() {
       <Card className="p-4 mb-6">
         <div className="flex items-center justify-between mb-3">
           <div className="flex items-center gap-2">
-            <StatusIndicator status={pmaInfo?.installed ? "running" : "stopped"} />
+            <StatusIndicator status={pmaInfo?.installed && info?.running ? "running" : "stopped"} />
             <span className="font-medium text-sm">phpMyAdmin</span>
             {pmaInfo?.version && (
               <Badge variant="outline" className="text-[10px]">{pmaInfo.version}</Badge>
@@ -199,13 +202,19 @@ export function DatabasePage() {
               disabled={pmaLoading}
             />
           ) : (
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => open("http://localhost/phpmyadmin")}
-            >
-              <ExternalLink className="mr-1 h-3 w-3" /> Open phpMyAdmin
-            </Button>
+            <div className="space-y-1.5">
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={!info?.running}
+                onClick={() => open(`http://localhost:${nginxInfo?.port ?? 8080}/phpmyadmin`)}
+              >
+                <ExternalLink className="mr-1 h-3 w-3" /> Open phpMyAdmin
+              </Button>
+              {!info?.running && (
+                <p className="text-[11px] text-muted-foreground">Start MariaDB first to use phpMyAdmin</p>
+              )}
+            </div>
           )}
         </div>
       </Card>

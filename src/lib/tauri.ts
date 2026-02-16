@@ -235,6 +235,14 @@ export async function dnsListEntries(): Promise<DnsEntry[]> {
   return invoke<DnsEntry[]>("dns_list_entries")
 }
 
+export async function dnsGetResolverStatus(tld: string): Promise<import("@/types/ssl").ResolverStatus> {
+  return invoke<import("@/types/ssl").ResolverStatus>("dns_get_resolver_status", { tld })
+}
+
+export async function dnsEnsureDnsmasqRunning(tld: string): Promise<void> {
+  return invoke<void>("dns_ensure_dnsmasq_running", { tld })
+}
+
 export async function dnsSetupResolver(tld: string): Promise<void> {
   return invoke<void>("dns_setup_resolver", { tld })
 }
@@ -296,6 +304,21 @@ export async function downloadAndInstallUpdate(
   })
 
   await relaunch()
+}
+
+// AI commands
+import type { AiModel, AiMessage } from "@/types/ai"
+
+export async function aiFetchModels(apiKey: string): Promise<AiModel[]> {
+  return invoke<AiModel[]>("ai_fetch_models", { apiKey })
+}
+
+export async function aiChat(messages: AiMessage[]): Promise<void> {
+  return invoke<void>("ai_chat", { messages })
+}
+
+export async function aiExecuteTool(toolName: string, toolArguments: string): Promise<string> {
+  return invoke<string>("ai_execute_tool", { toolName, arguments: toolArguments })
 }
 
 // Settings commands

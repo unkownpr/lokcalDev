@@ -5,8 +5,12 @@ export interface AppConfig {
   sitesDirectory: string
   tld: string
   nginxPort: number
+  nginxSslPort: number
   mariadbPort: number
   phpFpmBasePort: number
+  openrouterApiKey: string
+  aiModel: string
+  aiSystemPrompt: string
 }
 
 export interface SystemInfo {
