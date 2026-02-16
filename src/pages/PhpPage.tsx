@@ -12,6 +12,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { PageHeader } from "@/components/shared/PageHeader"
 import { DownloadButton } from "@/components/shared/DownloadButton"
 import { StatusIndicator } from "@/components/layout/StatusIndicator"
+import { ConfirmDialog } from "@/components/shared/ConfirmDialog"
 import { usePhpStore } from "@/stores/phpStore"
 import { useDownloadProgress } from "@/hooks/useDownloadProgress"
 
@@ -149,9 +150,17 @@ export function PhpPage() {
                         </Button>
                       )}
                       {!v.running && (
-                        <Button size="sm" variant="destructive" onClick={() => removeVersion(v.version)}>
-                          <Trash2 className="mr-1 h-3 w-3" /> Remove
-                        </Button>
+                        <ConfirmDialog
+                          trigger={
+                            <Button size="sm" variant="destructive">
+                              <Trash2 className="mr-1 h-3 w-3" /> Remove
+                            </Button>
+                          }
+                          title={`Remove PHP ${v.version}?`}
+                          description="This will uninstall this PHP version. Any sites using it will need to be reconfigured."
+                          confirmLabel="Remove"
+                          onConfirm={() => removeVersion(v.version)}
+                        />
                       )}
                     </>
                   )}

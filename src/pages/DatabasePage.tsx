@@ -15,6 +15,7 @@ import {
 import { PageHeader } from "@/components/shared/PageHeader"
 import { DownloadButton } from "@/components/shared/DownloadButton"
 import { StatusIndicator } from "@/components/layout/StatusIndicator"
+import { ConfirmDialog } from "@/components/shared/ConfirmDialog"
 import { useDatabaseStore } from "@/stores/databaseStore"
 import { useDownloadProgress } from "@/hooks/useDownloadProgress"
 import { toast } from "sonner"
@@ -227,14 +228,17 @@ export function DatabasePage() {
                     <span className="text-sm font-mono">{db.name}</span>
                   </div>
                   {!["mysql", "information_schema", "performance_schema", "sys"].includes(db.name) && (
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      className="text-destructive h-7"
-                      onClick={() => dropDatabase(db.name)}
-                    >
-                      <Trash2 className="h-3 w-3" />
-                    </Button>
+                    <ConfirmDialog
+                      trigger={
+                        <Button size="sm" variant="ghost" className="text-destructive h-7">
+                          <Trash2 className="h-3 w-3" />
+                        </Button>
+                      }
+                      title={`Drop "${db.name}"?`}
+                      description="This will permanently delete the database and all its data. This action cannot be undone."
+                      confirmLabel="Drop"
+                      onConfirm={() => dropDatabase(db.name)}
+                    />
                   )}
                 </div>
               ))}

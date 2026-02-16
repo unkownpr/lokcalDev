@@ -5,9 +5,13 @@ mod services;
 mod state;
 
 use config::paths;
+use services::mariadb_manager::MariaDbManager;
+use services::nginx_manager::NginxManager;
+use services::php_manager::PhpManager;
 use state::AppState;
 use tauri::image::Image;
 use tauri::menu::{AboutMetadata, Menu, PredefinedMenuItem, Submenu};
+use tauri::Manager;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -18,7 +22,7 @@ pub fn run() {
 
     let app_state = AppState::new(data_dir.to_string_lossy().to_string());
 
-    tauri::Builder::default()
+    let app = tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_store::Builder::default().build())
         .plugin(tauri_plugin_fs::init())
@@ -172,6 +176,37 @@ pub fn run() {
             commands::phpmyadmin_commands::phpmyadmin_install,
             commands::phpmyadmin_commands::phpmyadmin_get_info,
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application");
+
+    app.run(|app_handle, event| {
+        if let tauri::RunEvent::Exit = event {
+            shutdown_services(app_handle);
+        }
+    });
+}
+
+fn shutdown_services(app_handle: &tauri::AppHandle) {
+    // 1. Kill all tracked child processes
+    let state = app_handle.state::<AppState>();
+    if let Ok(mut children) = state.child_processes.lock() {
+        for (name, child) in children.iter_mut() {
+            log::info!("Shutting down child process: {}", name);
+            let _ = child.kill();
+            let _ = child.wait();
+        }
+        children.clear();
+    }
+
+    // 2. Safety net: stop services via their managers
+    log::info!("Running service shutdown safety net...");
+    let _ = NginxManager::stop();
+    let _ = MariaDbManager::stop();
+
+    // Stop all PHP-FPM versions
+    for version in &["8.1", "8.2", "8.3", "8.4"] {
+        let _ = PhpManager::stop_fpm(version);
+    }
+
+    log::info!("All services stopped");
 }

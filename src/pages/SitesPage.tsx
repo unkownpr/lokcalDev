@@ -8,6 +8,7 @@ import { PageHeader } from "@/components/shared/PageHeader"
 import { EmptyState } from "@/components/shared/EmptyState"
 import { SiteCreateDialog } from "@/components/shared/SiteCreateDialog"
 import { StatusIndicator } from "@/components/layout/StatusIndicator"
+import { ConfirmDialog } from "@/components/shared/ConfirmDialog"
 import { useSiteStore } from "@/stores/siteStore"
 import { usePhpStore } from "@/stores/phpStore"
 
@@ -106,14 +107,17 @@ export function SitesPage() {
                   >
                     <ExternalLink className="h-3.5 w-3.5" />
                   </Button>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    className="text-destructive"
-                    onClick={() => deleteSite(site.id)}
-                  >
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </Button>
+                  <ConfirmDialog
+                    trigger={
+                      <Button size="sm" variant="ghost" className="text-destructive">
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </Button>
+                    }
+                    title={`Delete "${site.name}"?`}
+                    description="This will remove the site configuration, DNS entry, and SSL certificate. Your project files will not be deleted."
+                    confirmLabel="Delete"
+                    onConfirm={() => deleteSite(site.id)}
+                  />
                 </div>
               </div>
             </Card>

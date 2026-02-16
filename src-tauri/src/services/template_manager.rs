@@ -2,6 +2,7 @@ use crate::error::AppError;
 use crate::services::download_manager::DownloadManager;
 use crate::services::mariadb_manager::MariaDbManager;
 use crate::services::site_manager::SiteManager;
+use crate::services::utils;
 use tauri::{AppHandle, Emitter};
 
 pub struct TemplateManager;
@@ -81,7 +82,7 @@ impl TemplateManager {
         let _ = std::fs::remove_file(&archive_path);
 
         // 4. Flatten wordpress/ subdirectory
-        Self::flatten_dir(&doc_root, "wordpress")?;
+        utils::flatten_extracted_dir(&doc_root,"wordpress")?;
 
         // 5. Auto-create MariaDB database (non-fatal)
         let db_name = Self::sanitize_db_name(&site.name);
@@ -211,7 +212,7 @@ require_once ABSPATH . 'wp-settings.php';
         let _ = std::fs::remove_file(&archive_path);
 
         // 4. Flatten laravel-master/ subdirectory
-        Self::flatten_dir(&doc_root, "laravel-")?;
+        utils::flatten_extracted_dir(&doc_root,"laravel-")?;
 
         // 5. Ensure public/ directory exists
         let public_dir = doc_root.join("public");
@@ -255,7 +256,7 @@ require_once ABSPATH . 'wp-settings.php';
         let _ = std::fs::remove_file(&archive_path);
 
         // 4. Flatten fatfree-master/ subdirectory
-        Self::flatten_dir(&doc_root, "fatfree-")?;
+        utils::flatten_extracted_dir(&doc_root,"fatfree-")?;
 
         // 5. Create tmp/ directory (F3 uses it for cache, sessions, etc.)
         Self::emit_progress(app, site_id, "configuring", "Configuring Fat-Free Framework...");
@@ -285,31 +286,4 @@ $f3->run();
         Ok(())
     }
 
-    // ── Shared helpers ─────────────────────────────────────────────
-
-    fn flatten_dir(base_dir: &std::path::Path, prefix: &str) -> Result<(), AppError> {
-        let mut extracted_dir = None;
-        for entry in std::fs::read_dir(base_dir)? {
-            let entry = entry?;
-            if entry.file_type()?.is_dir() {
-                let name = entry.file_name().to_string_lossy().to_string();
-                if name.starts_with(prefix) {
-                    extracted_dir = Some(entry.path());
-                    break;
-                }
-            }
-        }
-
-        if let Some(sub_dir) = extracted_dir {
-            for entry in std::fs::read_dir(&sub_dir)? {
-                let entry = entry?;
-                let dest = base_dir.join(entry.file_name());
-                if !dest.exists() {
-                    std::fs::rename(entry.path(), &dest)?;
-                }
-            }
-            let _ = std::fs::remove_dir_all(&sub_dir);
-        }
-        Ok(())
-    }
 }

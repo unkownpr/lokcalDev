@@ -1,7 +1,7 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "LokcalDev",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "identifier": "dev.lokcal.app",
   "build": {
     "frontendDist": "../dist",
@@ -44,7 +44,7 @@
   },
   "plugins": {
     "updater": {
-      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDgwOTJBMDRCQkUzQUJDMDUKUldRRnZEcStTNkNTZ01CZ1hNY2FuTlRZd3orUGhZcGhmdEpDSkJzMG1memFoZ1l6eGpjSGVaN2gK",
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDE0NzJDNzBFMDY4RUMzQTIKUldTaXc0NEdEc2R5RkptUGFqMFNUbkpneUY0a0pRemZWaEJvR0dFZi8rQWs5ejNuZWYyTExYNmUK",
       "endpoints": [
         "https://github.com/unkownpr/lokcalDev/releases/latest/download/latest.json"
       ]

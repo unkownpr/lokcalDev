@@ -1,6 +1,6 @@
 [package]
 name = "lokcal-dev"
-version = "0.1.2"
+version = "0.1.3"
 description = "LokcalDev - Local development environment manager for macOS and Windows"
 authors = ["ssilistre.dev"]
 license = "LicenseRef-LokcalDev"

@@ -6,12 +6,7 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import { PageHeader } from "@/components/shared/PageHeader"
 import { EmptyState } from "@/components/shared/EmptyState"
 import { useLogStore } from "@/stores/logStore"
-
-function formatSize(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
-}
+import { formatBytes } from "@/lib/utils"
 
 export function LogsPage() {
   const {
@@ -68,7 +63,7 @@ export function LogsPage() {
                   }}
                 >
                   <p className="truncate font-medium text-xs">{file.name}</p>
-                  <p className="text-[10px] text-muted-foreground">{formatSize(file.size)}</p>
+                  <p className="text-[10px] text-muted-foreground">{formatBytes(file.size)}</p>
                 </button>
               ))}
             </div>

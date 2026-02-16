@@ -178,12 +178,7 @@ impl MariaDbManager {
             return Err(AppError::Service("MariaDB is already installed".to_string()));
         }
 
-        let brew_check = Command::new("brew").arg("--version").output();
-        if brew_check.is_err() || !brew_check.unwrap().status.success() {
-            return Err(AppError::Service(
-                "Homebrew is not installed. Please install Homebrew first: https://brew.sh".to_string(),
-            ));
-        }
+        utils::ensure_homebrew()?;
 
         Self::emit_progress(app, "extracting", "Installing MariaDB via Homebrew...");
 
@@ -257,17 +252,8 @@ impl MariaDbManager {
         let data_dir = Self::get_data_dir();
         let initialized = data_dir.exists() && data_dir.join("mysql").exists();
         let pid_file = Self::get_pid_path();
-        let (running, pid) = if installed && pid_file.exists() {
-            if let Ok(pid_str) = std::fs::read_to_string(&pid_file) {
-                if let Ok(pid) = pid_str.trim().parse::<u32>() {
-                    let alive = utils::is_process_alive(pid);
-                    (alive, if alive { Some(pid) } else { None })
-                } else {
-                    (false, None)
-                }
-            } else {
-                (false, None)
-            }
+        let (running, pid) = if installed {
+            utils::read_pid_file(&pid_file)
         } else {
             (false, None)
         };

@@ -3,6 +3,7 @@ import { listen } from "@tauri-apps/api/event"
 import { Progress } from "@/components/ui/progress"
 import { Download, Loader2, CheckCircle2, XCircle } from "lucide-react"
 import type { DownloadProgress } from "@/types/php"
+import { formatBytes } from "@/lib/utils"
 
 const LABELS: Record<string, string> = {
   "php-8.1": "PHP 8.1",
@@ -12,12 +13,6 @@ const LABELS: Record<string, string> = {
   nginx: "Nginx",
   mariadb: "MariaDB",
   mkcert: "mkcert",
-}
-
-function formatBytes(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
 }
 
 export function GlobalDownloadBar() {

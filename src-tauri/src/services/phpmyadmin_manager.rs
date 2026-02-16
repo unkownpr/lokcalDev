@@ -86,7 +86,7 @@ impl PhpMyAdminManager {
         let _ = std::fs::remove_file(&archive_path);
 
         // Flatten: zip creates phpMyAdmin-5.2.2-all-languages/ subdirectory
-        Self::flatten_dir(&pma_dir)?;
+        utils::flatten_extracted_dir(&pma_dir, "phpMyAdmin-")?;
 
         // Write config
         Self::create_config()?;
@@ -136,32 +136,6 @@ impl PhpMyAdminManager {
             let _ = NginxManager::stop();
             let _ = NginxManager::start();
             log::info!("Nginx restarted to include phpMyAdmin location");
-        }
-        Ok(())
-    }
-
-    fn flatten_dir(base_dir: &std::path::Path) -> Result<(), AppError> {
-        let mut extracted_dir = None;
-        for entry in std::fs::read_dir(base_dir)? {
-            let entry = entry?;
-            if entry.file_type()?.is_dir() {
-                let name = entry.file_name().to_string_lossy().to_string();
-                if name.starts_with("phpMyAdmin-") {
-                    extracted_dir = Some(entry.path());
-                    break;
-                }
-            }
-        }
-
-        if let Some(sub_dir) = extracted_dir {
-            for entry in std::fs::read_dir(&sub_dir)? {
-                let entry = entry?;
-                let dest = base_dir.join(entry.file_name());
-                if !dest.exists() {
-                    std::fs::rename(entry.path(), &dest)?;
-                }
-            }
-            let _ = std::fs::remove_dir_all(&sub_dir);
         }
         Ok(())
     }

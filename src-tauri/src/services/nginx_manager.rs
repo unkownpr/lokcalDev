@@ -99,12 +99,7 @@ impl NginxManager {
             return Err(AppError::Service("Nginx is already installed".to_string()));
         }
 
-        let brew_check = Command::new("brew").arg("--version").output();
-        if brew_check.is_err() || !brew_check.unwrap().status.success() {
-            return Err(AppError::Service(
-                "Homebrew is not installed. Please install Homebrew first: https://brew.sh".to_string(),
-            ));
-        }
+        utils::ensure_homebrew()?;
 
         Self::emit_progress(app, "extracting", "Installing Nginx via Homebrew...");
 
@@ -179,17 +174,8 @@ impl NginxManager {
         let binary = Self::get_nginx_binary();
         let installed = binary.exists();
         let pid_file = Self::get_pid_path();
-        let (running, pid) = if installed && pid_file.exists() {
-            if let Ok(pid_str) = std::fs::read_to_string(&pid_file) {
-                if let Ok(pid) = pid_str.trim().parse::<u32>() {
-                    let alive = utils::is_process_alive(pid);
-                    (alive, if alive { Some(pid) } else { None })
-                } else {
-                    (false, None)
-                }
-            } else {
-                (false, None)
-            }
+        let (running, pid) = if installed {
+            utils::read_pid_file(&pid_file)
         } else {
             (false, None)
         };
@@ -442,14 +428,9 @@ impl NginxManager {
             let pid_path = paths::get_data_dir()
                 .join("data")
                 .join(format!("php-fpm-{}.pid", v));
-            if pid_path.exists() {
-                if let Ok(pid_str) = std::fs::read_to_string(&pid_path) {
-                    if let Ok(pid) = pid_str.trim().parse::<u32>() {
-                        if utils::is_process_alive(pid) {
-                            return utils::php_version_to_port(v);
-                        }
-                    }
-                }
+            let (alive, _) = utils::read_pid_file(&pid_path);
+            if alive {
+                return utils::php_version_to_port(v);
             }
         }
 

@@ -1,7 +1,6 @@
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-#[cfg(target_os = "windows")]
 use crate::error::AppError;
 
 /// Check if a process with the given PID is still alive.
@@ -57,15 +56,20 @@ pub fn kill_process(pid: u32) {
     }
 }
 
-/// Get the Homebrew prefix path (macOS only).
+/// Get the Homebrew prefix path (macOS only). Cached after first call.
 #[cfg(target_os = "macos")]
 pub fn get_brew_prefix() -> PathBuf {
-    let output = Command::new("brew")
-        .arg("--prefix")
-        .output()
-        .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
-        .unwrap_or_else(|_| "/opt/homebrew".to_string());
-    PathBuf::from(output)
+    static BREW_PREFIX: std::sync::OnceLock<PathBuf> = std::sync::OnceLock::new();
+    BREW_PREFIX
+        .get_or_init(|| {
+            let output = Command::new("brew")
+                .arg("--prefix")
+                .output()
+                .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
+                .unwrap_or_else(|_| "/opt/homebrew".to_string());
+            PathBuf::from(output)
+        })
+        .clone()
 }
 
 /// Convert a path to forward slashes (for config compatibility on Windows).
@@ -75,8 +79,7 @@ pub fn to_forward_slash(path: &Path) -> String {
 
 /// After extracting an archive that creates a subdirectory
 /// (e.g. nginx-1.28.2/), move all contents up to base_dir.
-#[cfg(target_os = "windows")]
-pub fn flatten_extracted_dir(base_dir: &PathBuf, prefix: &str) -> Result<(), AppError> {
+pub fn flatten_extracted_dir(base_dir: &Path, prefix: &str) -> Result<(), AppError> {
     let mut extracted_dir = None;
     for entry in std::fs::read_dir(base_dir)? {
         let entry = entry?;
@@ -100,6 +103,31 @@ pub fn flatten_extracted_dir(base_dir: &PathBuf, prefix: &str) -> Result<(), App
         let _ = std::fs::remove_dir_all(&sub_dir);
     }
     Ok(())
+}
+
+/// Check that Homebrew is installed (macOS only).
+#[cfg(target_os = "macos")]
+pub fn ensure_homebrew() -> Result<(), AppError> {
+    let brew_check = Command::new("brew").arg("--version").output();
+    if brew_check.is_err() || !brew_check.unwrap().status.success() {
+        return Err(AppError::Service(
+            "Homebrew is not installed. Please install Homebrew first: https://brew.sh".to_string(),
+        ));
+    }
+    Ok(())
+}
+
+/// Read a PID file and return the PID if the process is alive.
+pub fn read_pid_file(pid_path: &Path) -> (bool, Option<u32>) {
+    if pid_path.exists() {
+        if let Ok(pid_str) = std::fs::read_to_string(pid_path) {
+            if let Ok(pid) = pid_str.trim().parse::<u32>() {
+                let alive = is_process_alive(pid);
+                return (alive, if alive { Some(pid) } else { None });
+            }
+        }
+    }
+    (false, None)
 }
 
 /// Map PHP version string to its FPM port.
