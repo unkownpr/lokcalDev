@@ -17,6 +17,10 @@
 </p>
 
 <p align="center">
+  <a href="https://www.producthunt.com/products/lokcaldev?utm_source=badge-featured&utm_medium=badge&utm_campaign=badge-lokcaldev" target="_blank" rel="noopener noreferrer"><img src="https://api.producthunt.com/widgets/embed-image/v1/featured.svg?post_id=1080055&theme=neutral&t=1771219400358" alt="LokcalDev - Modern local development environment manager for Mac Windows | Product Hunt" width="250" height="54"></a>
+</p>
+
+<p align="center">
   <a href="https://unkownpr.github.io/lokcalDev/">Documentation</a> &bull;
   <a href="#features">Features</a> &bull;
   <a href="#screenshots">Screenshots</a> &bull;
