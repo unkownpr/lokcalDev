@@ -5,6 +5,7 @@
   "description": "Local development environment manager for macOS and Windows",
   "author": "ssilistre.dev",
   "license": "SEE LICENSE IN LICENSE",
+  "packageManager": "pnpm@10.29.3",
   "type": "module",
   "scripts": {
     "dev": "vite",
