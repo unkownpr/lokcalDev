@@ -210,14 +210,20 @@
       height: 18px;
     }
 
-    .hero-version {
+    .hero-badges {
+      display: flex;
+      gap: 8px;
+      justify-content: center;
+      flex-wrap: wrap;
+    }
+
+    .hero-badges a {
       display: inline-block;
-      font-size: 13px;
-      color: #737373;
-      background: #fff;
-      border: 1px solid #E8E8E8;
-      padding: 4px 12px;
-      border-radius: 20px;
+      line-height: 0;
+    }
+
+    .hero-badges img {
+      height: 22px;
     }
 
     /* Section */
@@ -659,7 +665,12 @@
           Download for Windows
         </a>
       </div>
-      <span class="hero-version">v0.1.2</span>
+      <div class="hero-badges">
+        <a href="https://github.com/unkownpr/lokcalDev/stargazers"><img src="https://img.shields.io/github/stars/unkownpr/lokcalDev?style=flat&color=1e293b" alt="Stars"></a>
+        <a href="https://github.com/unkownpr/lokcalDev/actions/workflows/release.yml"><img src="https://img.shields.io/github/actions/workflow/status/unkownpr/lokcalDev/release.yml?style=flat&label=build" alt="Build"></a>
+        <a href="https://github.com/unkownpr/lokcalDev/releases"><img src="https://img.shields.io/github/downloads/unkownpr/lokcalDev/total?style=flat&color=1e293b" alt="Downloads"></a>
+        <a href="https://github.com/unkownpr/lokcalDev/releases/latest"><img src="https://img.shields.io/github/v/release/unkownpr/lokcalDev?style=flat&color=1e293b" alt="Release"></a>
+      </div>
     </div>
   </section>
 

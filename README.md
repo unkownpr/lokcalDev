@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="src-tauri/icons/128x128@2x.png" width="100" alt="LokcalDev Logo">
+  <img src="https://raw.githubusercontent.com/unkownpr/lokcalDev/main/src-tauri/icons/128x128%402x.png" width="100" alt="LokcalDev Logo">
 </p>
 
 <h1 align="center">LokcalDev</h1>
@@ -7,6 +7,13 @@
 <p align="center">
   <strong>A modern local development environment manager for macOS &amp; Windows.</strong><br>
   The lightweight alternative to MAMP PRO and Laravel Herd — built with Tauri, Rust, and React.
+</p>
+
+<p align="center">
+  <a href="https://github.com/unkownpr/lokcalDev/stargazers"><img src="https://img.shields.io/github/stars/unkownpr/lokcalDev?style=flat&color=1e293b" alt="Stars"></a>
+  <a href="https://github.com/unkownpr/lokcalDev/actions/workflows/release.yml"><img src="https://img.shields.io/github/actions/workflow/status/unkownpr/lokcalDev/release.yml?style=flat&label=build" alt="Build"></a>
+  <a href="https://github.com/unkownpr/lokcalDev/releases"><img src="https://img.shields.io/github/downloads/unkownpr/lokcalDev/total?style=flat&color=1e293b" alt="Downloads"></a>
+  <a href="https://github.com/unkownpr/lokcalDev/releases/latest"><img src="https://img.shields.io/github/v/release/unkownpr/lokcalDev?style=flat&color=1e293b" alt="Release"></a>
 </p>
 
 <p align="center">
