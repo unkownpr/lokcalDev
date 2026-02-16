@@ -44,7 +44,7 @@
   },
   "plugins": {
     "updater": {
-      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDE0NzJDNzBFMDY4RUMzQTIKUldTaXc0NEdEc2R5RkptUGFqMFNUbkpneUY0a0pRemZWaEJvR0dFZi8rQWs5ejNuZWYyTExYNmUK",
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDI2NTJGNjg5NzA3OUFCQjUKUldTMXEzbHdpZlpTSmtGVGZMQzRrclQ5RmxnQzJ1dEJvSngrdm52RWREVkFmb0U1QXRQd3NqOW4K",
       "endpoints": [
         "https://github.com/unkownpr/lokcalDev/releases/latest/download/latest.json"
       ]
