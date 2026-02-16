@@ -1,0 +1,963 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>LokcalDev — Modern Local Development Environment</title>
+  <meta name="description" content="A modern local development environment manager for macOS & Windows. The lightweight alternative to MAMP PRO and Laravel Herd.">
+  <link rel="icon" href="logo.png" type="image/png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    html {
+      scroll-behavior: smooth;
+    }
+
+    body {
+      font-family: 'Inter', system-ui, -apple-system, sans-serif;
+      background: #F5F5F5;
+      color: #1A1A1A;
+      line-height: 1.6;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* Container */
+    .container {
+      max-width: 1120px;
+      margin: 0 auto;
+      padding: 0 24px;
+    }
+
+    /* Nav */
+    nav {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      background: rgba(245, 245, 245, 0.85);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border-bottom: 1px solid #E8E8E8;
+      z-index: 100;
+    }
+
+    .nav-inner {
+      max-width: 1120px;
+      margin: 0 auto;
+      padding: 0 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      height: 60px;
+    }
+
+    .nav-brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      text-decoration: none;
+      color: #1A1A1A;
+      font-weight: 700;
+      font-size: 18px;
+    }
+
+    .nav-brand img {
+      width: 32px;
+      height: 32px;
+      border-radius: 6px;
+    }
+
+    .nav-links {
+      display: flex;
+      align-items: center;
+      gap: 28px;
+    }
+
+    .nav-links a {
+      text-decoration: none;
+      color: #737373;
+      font-size: 14px;
+      font-weight: 500;
+      transition: color 0.2s;
+    }
+
+    .nav-links a:hover {
+      color: #1A1A1A;
+    }
+
+    .nav-github {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      background: #1e293b;
+      color: #fff !important;
+      padding: 8px 16px;
+      border-radius: 8px;
+      font-size: 13px !important;
+      transition: background 0.2s;
+    }
+
+    .nav-github:hover {
+      background: #0f172a;
+      color: #fff !important;
+    }
+
+    .nav-github svg {
+      width: 16px;
+      height: 16px;
+    }
+
+    /* Mobile nav toggle */
+    .nav-toggle {
+      display: none;
+      background: none;
+      border: none;
+      cursor: pointer;
+      padding: 4px;
+    }
+
+    .nav-toggle svg {
+      width: 24px;
+      height: 24px;
+      color: #1A1A1A;
+    }
+
+    /* Hero */
+    .hero {
+      padding: 140px 0 80px;
+      text-align: center;
+    }
+
+    .hero-logo {
+      width: 80px;
+      height: 80px;
+      border-radius: 16px;
+      margin-bottom: 24px;
+    }
+
+    .hero h1 {
+      font-size: 48px;
+      font-weight: 800;
+      letter-spacing: -1.5px;
+      margin-bottom: 16px;
+      background: linear-gradient(135deg, #1e293b, #0f172a);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    .hero p {
+      font-size: 19px;
+      color: #737373;
+      max-width: 560px;
+      margin: 0 auto 36px;
+      line-height: 1.7;
+    }
+
+    .hero-buttons {
+      display: flex;
+      gap: 12px;
+      justify-content: center;
+      flex-wrap: wrap;
+      margin-bottom: 20px;
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 12px 24px;
+      border-radius: 10px;
+      font-size: 15px;
+      font-weight: 600;
+      text-decoration: none;
+      transition: all 0.2s;
+      cursor: pointer;
+      border: none;
+    }
+
+    .btn-primary {
+      background: linear-gradient(135deg, #1e293b, #0f172a);
+      color: #fff;
+    }
+
+    .btn-primary:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px rgba(15, 23, 42, 0.3);
+    }
+
+    .btn-secondary {
+      background: #fff;
+      color: #1A1A1A;
+      border: 1px solid #E8E8E8;
+    }
+
+    .btn-secondary:hover {
+      border-color: #CFCFCF;
+      transform: translateY(-1px);
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+    }
+
+    .btn svg {
+      width: 18px;
+      height: 18px;
+    }
+
+    .hero-version {
+      display: inline-block;
+      font-size: 13px;
+      color: #737373;
+      background: #fff;
+      border: 1px solid #E8E8E8;
+      padding: 4px 12px;
+      border-radius: 20px;
+    }
+
+    /* Section */
+    section {
+      padding: 80px 0;
+      scroll-margin-top: 80px;
+    }
+
+    .section-header {
+      text-align: center;
+      margin-bottom: 48px;
+    }
+
+    .section-header h2 {
+      font-size: 32px;
+      font-weight: 700;
+      letter-spacing: -0.5px;
+      margin-bottom: 12px;
+    }
+
+    .section-header p {
+      font-size: 16px;
+      color: #737373;
+      max-width: 520px;
+      margin: 0 auto;
+    }
+
+    /* Features Grid */
+    .features-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 20px;
+    }
+
+    .feature-card {
+      background: #fff;
+      border: 1px solid #E8E8E8;
+      border-radius: 12px;
+      padding: 28px;
+      transition: all 0.2s;
+    }
+
+    .feature-card:hover {
+      border-color: #CFCFCF;
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.05);
+    }
+
+    .feature-icon {
+      width: 40px;
+      height: 40px;
+      background: linear-gradient(135deg, #1e293b, #334155);
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 16px;
+      font-size: 18px;
+    }
+
+    .feature-card h3 {
+      font-size: 16px;
+      font-weight: 600;
+      margin-bottom: 8px;
+    }
+
+    .feature-card p {
+      font-size: 14px;
+      color: #737373;
+      line-height: 1.6;
+    }
+
+    /* Templates Section */
+    .templates-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 20px;
+    }
+
+    .template-card {
+      background: #fff;
+      border: 1px solid #E8E8E8;
+      border-radius: 12px;
+      padding: 24px;
+      text-align: center;
+      transition: all 0.2s;
+    }
+
+    .template-card:hover {
+      border-color: #CFCFCF;
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.05);
+    }
+
+    .template-icon {
+      font-size: 32px;
+      margin-bottom: 12px;
+    }
+
+    .template-card h3 {
+      font-size: 15px;
+      font-weight: 600;
+      margin-bottom: 6px;
+    }
+
+    .template-card .desc {
+      font-size: 13px;
+      color: #737373;
+      margin-bottom: 14px;
+      line-height: 1.5;
+    }
+
+    .template-card ul {
+      list-style: none;
+      text-align: left;
+      font-size: 12px;
+      color: #525252;
+    }
+
+    .template-card ul li {
+      padding: 3px 0;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .template-card ul li::before {
+      content: "\2713";
+      color: #1e293b;
+      font-weight: 700;
+      font-size: 11px;
+    }
+
+    /* Guide Section */
+    .guide-steps {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      max-width: 720px;
+      margin: 0 auto;
+    }
+
+    .guide-step {
+      background: #fff;
+      border: 1px solid #E8E8E8;
+      border-radius: 12px;
+      overflow: hidden;
+    }
+
+    .guide-step-header {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      padding: 20px 24px;
+      cursor: pointer;
+      user-select: none;
+      transition: background 0.15s;
+    }
+
+    .guide-step-header:hover {
+      background: #FAFAFA;
+    }
+
+    .step-number {
+      width: 32px;
+      height: 32px;
+      background: linear-gradient(135deg, #1e293b, #334155);
+      color: #fff;
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 14px;
+      font-weight: 700;
+      flex-shrink: 0;
+    }
+
+    .guide-step-header h3 {
+      font-size: 15px;
+      font-weight: 600;
+      flex: 1;
+    }
+
+    .step-toggle {
+      width: 20px;
+      height: 20px;
+      color: #737373;
+      transition: transform 0.2s;
+      flex-shrink: 0;
+    }
+
+    .guide-step.open .step-toggle {
+      transform: rotate(180deg);
+    }
+
+    .guide-step-content {
+      display: none;
+      padding: 0 24px 20px 72px;
+      font-size: 14px;
+      color: #525252;
+      line-height: 1.7;
+    }
+
+    .guide-step.open .guide-step-content {
+      display: block;
+    }
+
+    .guide-step-content ol {
+      margin: 0;
+      padding-left: 18px;
+    }
+
+    .guide-step-content ol li {
+      margin-bottom: 6px;
+    }
+
+    .guide-step-content code {
+      background: #F5F5F5;
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-size: 13px;
+      font-family: 'SF Mono', 'Fira Code', monospace;
+    }
+
+    /* Tech Stack */
+    .tech-grid {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      justify-content: center;
+    }
+
+    .tech-pill {
+      background: #fff;
+      border: 1px solid #E8E8E8;
+      border-radius: 20px;
+      padding: 10px 20px;
+      font-size: 14px;
+      font-weight: 500;
+      color: #1A1A1A;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      transition: all 0.2s;
+    }
+
+    .tech-pill:hover {
+      border-color: #CFCFCF;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+    }
+
+    .tech-pill span {
+      font-size: 16px;
+    }
+
+    /* Screenshots */
+    .screenshots-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 20px;
+    }
+
+    .screenshot-card {
+      background: #fff;
+      border: 1px solid #E8E8E8;
+      border-radius: 12px;
+      overflow: hidden;
+      transition: all 0.2s;
+    }
+
+    .screenshot-card:hover {
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.06);
+    }
+
+    .screenshot-card img {
+      width: 100%;
+      display: block;
+    }
+
+    .screenshot-card .caption {
+      padding: 14px 18px;
+      font-size: 14px;
+      font-weight: 500;
+      text-align: center;
+      color: #525252;
+    }
+
+    .screenshot-single {
+      max-width: 560px;
+      margin: 20px auto 0;
+    }
+
+    /* Footer */
+    footer {
+      border-top: 1px solid #E8E8E8;
+      padding: 40px 0;
+      text-align: center;
+    }
+
+    .footer-links {
+      display: flex;
+      justify-content: center;
+      gap: 24px;
+      margin-bottom: 16px;
+      flex-wrap: wrap;
+    }
+
+    .footer-links a {
+      text-decoration: none;
+      color: #737373;
+      font-size: 14px;
+      transition: color 0.2s;
+    }
+
+    .footer-links a:hover {
+      color: #1A1A1A;
+    }
+
+    .footer-bottom {
+      font-size: 13px;
+      color: #A3A3A3;
+    }
+
+    .footer-bottom a {
+      color: #737373;
+      text-decoration: none;
+    }
+
+    .footer-bottom a:hover {
+      color: #1A1A1A;
+    }
+
+    /* Responsive */
+    @media (max-width: 768px) {
+      .nav-links {
+        display: none;
+        position: absolute;
+        top: 60px;
+        left: 0;
+        right: 0;
+        background: rgba(245, 245, 245, 0.98);
+        backdrop-filter: blur(12px);
+        -webkit-backdrop-filter: blur(12px);
+        flex-direction: column;
+        padding: 16px 24px;
+        gap: 12px;
+        border-bottom: 1px solid #E8E8E8;
+      }
+
+      .nav-links.open {
+        display: flex;
+      }
+
+      .nav-toggle {
+        display: block;
+      }
+
+      .hero {
+        padding: 120px 0 60px;
+      }
+
+      .hero h1 {
+        font-size: 32px;
+      }
+
+      .hero p {
+        font-size: 16px;
+      }
+
+      .features-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .templates-grid {
+        grid-template-columns: repeat(2, 1fr);
+      }
+
+      .screenshots-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .section-header h2 {
+        font-size: 26px;
+      }
+
+      .guide-step-content {
+        padding-left: 24px;
+      }
+    }
+
+    @media (max-width: 480px) {
+      .templates-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .hero-buttons {
+        flex-direction: column;
+        align-items: center;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Nav -->
+  <nav>
+    <div class="nav-inner">
+      <a href="#" class="nav-brand">
+        <img src="logo.png" alt="LokcalDev">
+        LokcalDev
+      </a>
+      <button class="nav-toggle" onclick="document.querySelector('.nav-links').classList.toggle('open')" aria-label="Toggle menu">
+        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h16"/></svg>
+      </button>
+      <div class="nav-links">
+        <a href="#features">Features</a>
+        <a href="#templates">Templates</a>
+        <a href="#guide">Guide</a>
+        <a href="#screenshots">Screenshots</a>
+        <a href="https://github.com/unkownpr/lokcalDev" class="nav-github" target="_blank" rel="noopener">
+          <svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+          GitHub
+        </a>
+      </div>
+    </div>
+  </nav>
+
+  <!-- Hero -->
+  <section class="hero">
+    <div class="container">
+      <img src="logo.png" alt="LokcalDev Logo" class="hero-logo">
+      <h1>LokcalDev</h1>
+      <p>A modern local development environment manager for macOS &amp; Windows. The lightweight alternative to MAMP PRO and Laravel Herd.</p>
+      <div class="hero-buttons">
+        <a href="https://github.com/unkownpr/lokcalDev/releases/latest" class="btn btn-primary">
+          <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M7 10l5 5 5-5M12 15V3"/></svg>
+          Download for macOS
+        </a>
+        <a href="https://github.com/unkownpr/lokcalDev/releases/latest" class="btn btn-secondary">
+          <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M7 10l5 5 5-5M12 15V3"/></svg>
+          Download for Windows
+        </a>
+      </div>
+      <span class="hero-version">v0.1.2</span>
+    </div>
+  </section>
+
+  <!-- Features -->
+  <section id="features">
+    <div class="container">
+      <div class="section-header">
+        <h2>Everything You Need</h2>
+        <p>A complete local development stack managed from one clean interface. No terminal gymnastics required.</p>
+      </div>
+      <div class="features-grid">
+        <div class="feature-card">
+          <div class="feature-icon">
+            <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="#fff" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"/></svg>
+          </div>
+          <h3>Multi-version PHP</h3>
+          <p>Install and run PHP 8.1 through 8.4 side-by-side. Switch versions per site. Manage extensions and php.ini from the UI.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">
+            <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="#fff" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2m-2-4h.01M17 16h.01"/></svg>
+          </div>
+          <h3>Nginx Web Server</h3>
+          <p>Auto-configured virtual hosts, SSL support, and phpMyAdmin integration. Zero-config Nginx setup out of the box.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">
+            <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="#fff" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4"/></svg>
+          </div>
+          <h3>MariaDB + phpMyAdmin</h3>
+          <p>One-click database installation and management. Visual database administration with phpMyAdmin built right in.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">
+            <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="#fff" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/></svg>
+          </div>
+          <h3>Site Management &amp; Templates</h3>
+          <p>Create .test domains instantly. Each site gets its own config, PHP version, and optional SSL. Templates for WordPress, Laravel, and more.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">
+            <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="#fff" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
+          </div>
+          <h3>SSL Certificates</h3>
+          <p>Auto-generate trusted local SSL certificates via mkcert. HTTPS on your local sites just works with zero configuration.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">
+            <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="#fff" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9"/></svg>
+          </div>
+          <h3>DNS Management</h3>
+          <p>Automatic /etc/hosts management so your .test domains resolve instantly. No more manual file editing.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Templates -->
+  <section id="templates" style="background: #fff; border-top: 1px solid #E8E8E8; border-bottom: 1px solid #E8E8E8;">
+    <div class="container">
+      <div class="section-header">
+        <h2>Site Templates</h2>
+        <p>Scaffold new projects instantly with built-in templates. Everything is configured and ready to code.</p>
+      </div>
+      <div class="templates-grid">
+        <div class="template-card">
+          <div class="template-icon">&#128196;</div>
+          <h3>Blank</h3>
+          <p class="desc">A clean starting point with a simple index.php file.</p>
+          <ul>
+            <li>Nginx virtual host</li>
+            <li>PHP-FPM config</li>
+            <li>Default index.php</li>
+          </ul>
+        </div>
+        <div class="template-card">
+          <div class="template-icon">&#127760;</div>
+          <h3>WordPress</h3>
+          <p class="desc">Full WordPress installation with database auto-provisioning.</p>
+          <ul>
+            <li>Latest WordPress download</li>
+            <li>Auto database creation</li>
+            <li>wp-config.php setup</li>
+            <li>Correct permissions</li>
+          </ul>
+        </div>
+        <div class="template-card">
+          <div class="template-icon">&#9898;</div>
+          <h3>Laravel</h3>
+          <p class="desc">Laravel project via Composer with optimized Nginx config.</p>
+          <ul>
+            <li>Composer create-project</li>
+            <li>Public dir Nginx config</li>
+            <li>Auto database creation</li>
+            <li>.env configuration</li>
+          </ul>
+        </div>
+        <div class="template-card">
+          <div class="template-icon">&#9889;</div>
+          <h3>Fat-Free Framework</h3>
+          <p class="desc">Lightweight F3 installation with rewrite-ready config.</p>
+          <ul>
+            <li>Composer require f3</li>
+            <li>URL rewrite config</li>
+            <li>Bootstrap index.php</li>
+            <li>Public directory setup</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Guide -->
+  <section id="guide">
+    <div class="container">
+      <div class="section-header">
+        <h2>Getting Started</h2>
+        <p>From install to running your first site in minutes. Follow these steps to set up your environment.</p>
+      </div>
+      <div class="guide-steps">
+
+        <div class="guide-step open">
+          <div class="guide-step-header" onclick="this.parentElement.classList.toggle('open')">
+            <div class="step-number">1</div>
+            <h3>Install LokcalDev</h3>
+            <svg class="step-toggle" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/></svg>
+          </div>
+          <div class="guide-step-content">
+            <ol>
+              <li>Download the latest release for your platform from <a href="https://github.com/unkownpr/lokcalDev/releases/latest">GitHub Releases</a>.</li>
+              <li>On macOS, open the <code>.dmg</code> and drag LokcalDev to Applications.</li>
+              <li>On Windows, run the <code>.exe</code> installer.</li>
+              <li>Launch LokcalDev from your Applications folder or Start menu.</li>
+            </ol>
+          </div>
+        </div>
+
+        <div class="guide-step">
+          <div class="guide-step-header" onclick="this.parentElement.classList.toggle('open')">
+            <div class="step-number">2</div>
+            <h3>Install PHP</h3>
+            <svg class="step-toggle" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/></svg>
+          </div>
+          <div class="guide-step-content">
+            <ol>
+              <li>Navigate to the <strong>PHP</strong> page from the sidebar.</li>
+              <li>Choose the PHP version you need (8.1, 8.2, 8.3, or 8.4).</li>
+              <li>Click <strong>Install</strong> and wait for the download to complete.</li>
+              <li>Once installed, PHP-FPM starts automatically. Manage extensions and <code>php.ini</code> settings from the same page.</li>
+            </ol>
+          </div>
+        </div>
+
+        <div class="guide-step">
+          <div class="guide-step-header" onclick="this.parentElement.classList.toggle('open')">
+            <div class="step-number">3</div>
+            <h3>Start Nginx</h3>
+            <svg class="step-toggle" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/></svg>
+          </div>
+          <div class="guide-step-content">
+            <ol>
+              <li>Go to the <strong>Services</strong> page.</li>
+              <li>Click <strong>Install</strong> next to Nginx if it is not already installed.</li>
+              <li>Click <strong>Start</strong> to launch the Nginx web server.</li>
+              <li>Nginx is now running and ready to serve your sites.</li>
+            </ol>
+          </div>
+        </div>
+
+        <div class="guide-step">
+          <div class="guide-step-header" onclick="this.parentElement.classList.toggle('open')">
+            <div class="step-number">4</div>
+            <h3>Set Up MariaDB</h3>
+            <svg class="step-toggle" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/></svg>
+          </div>
+          <div class="guide-step-content">
+            <ol>
+              <li>Go to the <strong>Database</strong> page.</li>
+              <li>Click <strong>Install</strong> to download MariaDB.</li>
+              <li>Click <strong>Initialize</strong> to set up the data directory.</li>
+              <li>Click <strong>Start</strong> to launch the database server.</li>
+              <li>Create databases directly from the UI as needed.</li>
+            </ol>
+          </div>
+        </div>
+
+        <div class="guide-step">
+          <div class="guide-step-header" onclick="this.parentElement.classList.toggle('open')">
+            <div class="step-number">5</div>
+            <h3>Create Your First Site</h3>
+            <svg class="step-toggle" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/></svg>
+          </div>
+          <div class="guide-step-content">
+            <ol>
+              <li>Navigate to the <strong>Sites</strong> page and click <strong>Add Site</strong>.</li>
+              <li>Choose a template: Blank, WordPress, Laravel, or Fat-Free Framework.</li>
+              <li>Set a domain name (e.g., <code>myproject.test</code>) and document root.</li>
+              <li>Select the PHP version for this site.</li>
+              <li>Click <strong>Create</strong> — the site is live and accessible in your browser.</li>
+            </ol>
+          </div>
+        </div>
+
+        <div class="guide-step">
+          <div class="guide-step-header" onclick="this.parentElement.classList.toggle('open')">
+            <div class="step-number">6</div>
+            <h3>Enable SSL</h3>
+            <svg class="step-toggle" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/></svg>
+          </div>
+          <div class="guide-step-content">
+            <ol>
+              <li>Go to the <strong>SSL</strong> page.</li>
+              <li>Install <strong>mkcert</strong> if prompted (one-time setup).</li>
+              <li>Install the <strong>Certificate Authority</strong> to trust local certificates.</li>
+              <li>Toggle SSL on for any site — a trusted HTTPS certificate is generated automatically.</li>
+            </ol>
+          </div>
+        </div>
+
+        <div class="guide-step">
+          <div class="guide-step-header" onclick="this.parentElement.classList.toggle('open')">
+            <div class="step-number">7</div>
+            <h3>Install phpMyAdmin</h3>
+            <svg class="step-toggle" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/></svg>
+          </div>
+          <div class="guide-step-content">
+            <ol>
+              <li>On the <strong>Database</strong> page, click <strong>Install phpMyAdmin</strong>.</li>
+              <li>Once installed, click <strong>Open phpMyAdmin</strong> to launch it in your browser.</li>
+              <li>Log in with user <code>root</code> and no password (local development defaults).</li>
+              <li>Manage your databases, tables, and queries visually.</li>
+            </ol>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </section>
+
+  <!-- Tech Stack -->
+  <section id="tech-stack" style="background: #fff; border-top: 1px solid #E8E8E8; border-bottom: 1px solid #E8E8E8;">
+    <div class="container">
+      <div class="section-header">
+        <h2>Built With</h2>
+        <p>Modern technologies for a fast, native experience under 15 MB.</p>
+      </div>
+      <div class="tech-grid">
+        <div class="tech-pill"><span>&#9881;</span> Tauri 2.0</div>
+        <div class="tech-pill"><span>&#129408;</span> Rust</div>
+        <div class="tech-pill"><span>&#9883;</span> React 19</div>
+        <div class="tech-pill"><span>&#128312;</span> TypeScript</div>
+        <div class="tech-pill"><span>&#127912;</span> Tailwind CSS v4</div>
+        <div class="tech-pill"><span>&#9632;</span> shadcn/ui</div>
+        <div class="tech-pill"><span>&#128059;</span> Zustand</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Screenshots -->
+  <section id="screenshots">
+    <div class="container">
+      <div class="section-header">
+        <h2>Screenshots</h2>
+        <p>A clean, focused interface that stays out of your way.</p>
+      </div>
+      <div class="screenshots-grid">
+        <div class="screenshot-card">
+          <img src="https://raw.githubusercontent.com/unkownpr/lokcalDev/main/screenshots/dashboard.png" alt="Dashboard" loading="lazy">
+          <div class="caption">Dashboard</div>
+        </div>
+        <div class="screenshot-card">
+          <img src="https://raw.githubusercontent.com/unkownpr/lokcalDev/main/screenshots/php-management.png" alt="PHP Management" loading="lazy">
+          <div class="caption">PHP Management</div>
+        </div>
+      </div>
+      <div class="screenshot-single">
+        <div class="screenshot-card">
+          <img src="https://raw.githubusercontent.com/unkownpr/lokcalDev/main/screenshots/settings.png" alt="Settings" loading="lazy">
+          <div class="caption">Settings</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Footer -->
+  <footer>
+    <div class="container">
+      <div class="footer-links">
+        <a href="https://github.com/unkownpr/lokcalDev" target="_blank" rel="noopener">GitHub</a>
+        <a href="https://github.com/unkownpr/lokcalDev/releases/latest" target="_blank" rel="noopener">Releases</a>
+        <a href="https://github.com/unkownpr/lokcalDev/issues" target="_blank" rel="noopener">Issues</a>
+        <a href="https://github.com/unkownpr/lokcalDev/blob/main/LICENSE" target="_blank" rel="noopener">License</a>
+      </div>
+      <div class="footer-bottom">
+        Made by <a href="https://ssilistre.dev" target="_blank" rel="noopener">ssilistre.dev</a> &middot; Built with Tauri &amp; Rust
+      </div>
+    </div>
+  </footer>
+
+</body>
+</html>

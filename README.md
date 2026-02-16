@@ -10,6 +10,7 @@
 </p>
 
 <p align="center">
+  <a href="https://unkownpr.github.io/lokcalDev/">Documentation</a> &bull;
   <a href="#features">Features</a> &bull;
   <a href="#screenshots">Screenshots</a> &bull;
   <a href="#installation">Installation</a> &bull;
@@ -31,7 +32,7 @@ Manage **PHP**, **Nginx**, **MariaDB**, **SSL certificates**, and **DNS** from o
 - **Multi-version PHP** — Install and run PHP 8.1, 8.2, 8.3, and 8.4 side-by-side. Switch versions per site. Manage extensions and `php.ini` from the UI.
 - **Nginx Web Server** — Auto-configured virtual hosts, SSL support, and phpMyAdmin integration out of the box.
 - **MariaDB Database** — One-click install, initialize, and manage databases. Comes with phpMyAdmin for visual database management.
-- **Site Management** — Create `.test` domains with a single click. Each site gets its own Nginx config, PHP version, and optional SSL.
+- **Site Management** — Create `.test` domains with a single click. Each site gets its own Nginx config, PHP version, and optional SSL. Built-in templates for **WordPress**, **Laravel**, and **Fat-Free Framework** to scaffold projects instantly.
 - **SSL Certificates** — Auto-generate trusted local SSL certificates via [mkcert](https://github.com/FiloSottile/mkcert). HTTPS just works.
 - **DNS Management** — Automatic `/etc/hosts` management so your `.test` domains resolve instantly.
 - **Real-time Logs** — Tail Nginx access/error logs and PHP-FPM logs live from the dashboard.
@@ -64,6 +65,13 @@ Manage **PHP**, **Nginx**, **MariaDB**, **SSL certificates**, and **DNS** from o
 
 - **macOS**: [Homebrew](https://brew.sh) (used to install PHP and Nginx)
 - **Windows**: No prerequisites — binaries are downloaded automatically
+
+### Download Binary
+
+Download the latest release for your platform:
+
+- **macOS (Apple Silicon):** [Download .dmg](https://github.com/unkownpr/lokcalDev/releases/latest)
+- **Windows (x64):** [Download .exe](https://github.com/unkownpr/lokcalDev/releases/latest)
 
 ### From Source
 
@@ -158,9 +166,9 @@ The Rust backend hot-reloads on save. The React frontend uses Vite HMR.
 - [ ] PostgreSQL support
 - [ ] Node.js version management
 - [ ] Composer integration
-- [ ] Site templates (Laravel, WordPress, etc.)
+- [x] Site templates (Laravel, WordPress, Fat-Free Framework)
 - [ ] Import/export environment configurations
-- [ ] Auto-update mechanism
+- [x] Auto-update mechanism
 
 ## License
 
