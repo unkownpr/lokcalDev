@@ -191,6 +191,10 @@ The Rust backend hot-reloads on save. The React frontend uses Vite HMR.
 - [x] Password-free operation (no sudo for start/stop)
 - [x] Auto DNS resolver (dnsmasq on macOS)
 
+## Star History
+
+[![Star History Chart](https://api.star-history.com/svg?repos=unkownpr/lokcalDev&type=date&legend=top-left)](https://www.star-history.com/#unkownpr/lokcalDev&type=date&legend=top-left)
+
 ## License
 
 This project is **source-available** under the [LokcalDev Source Available License](LICENSE).
