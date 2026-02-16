@@ -41,11 +41,12 @@ Manage **PHP**, **Nginx**, **MariaDB**, **SSL certificates**, and **DNS** from o
 ## Features
 
 - **Multi-version PHP** — Install and run PHP 8.1, 8.2, 8.3, and 8.4 side-by-side. Switch versions per site. Manage extensions and `php.ini` from the UI.
-- **Nginx Web Server** — Auto-configured virtual hosts, SSL support, and phpMyAdmin integration out of the box.
+- **Nginx Web Server** — Auto-configured virtual hosts, SSL support, and phpMyAdmin integration out of the box. Runs on port 8080 — no password prompts.
 - **MariaDB Database** — One-click install, initialize, and manage databases. Comes with phpMyAdmin for visual database management.
 - **Site Management** — Create `.test` domains with a single click. Each site gets its own Nginx config, PHP version, and optional SSL. Built-in templates for **WordPress**, **Laravel**, and **Fat-Free Framework** to scaffold projects instantly.
 - **SSL Certificates** — Auto-generate trusted local SSL certificates via [mkcert](https://github.com/FiloSottile/mkcert). HTTPS just works.
-- **DNS Management** — Automatic `/etc/hosts` management so your `.test` domains resolve instantly.
+- **DNS Management** — Automatic DNS resolution via dnsmasq (macOS) or `/etc/hosts` (Windows). Your `.test` domains resolve instantly with zero manual configuration.
+- **AI Assistant** — Built-in AI chat powered by [OpenRouter](https://openrouter.ai). Ask it to start services, create sites, write files, and more — with tool calling support.
 - **Real-time Logs** — Tail Nginx access/error logs and PHP-FPM logs live from the dashboard.
 - **Lightweight & Native** — Built with Tauri 2.0, the app is under 15 MB. No Electron, no bundled Chromium, no bloat.
 
@@ -61,12 +62,12 @@ Manage **PHP**, **Nginx**, **MariaDB**, **SSL certificates**, and **DNS** from o
     <td><img src="screenshots/php-management.png" width="450" alt="PHP Management"></td>
   </tr>
   <tr>
+    <td align="center"><strong>AI Assistant</strong></td>
     <td align="center"><strong>Settings</strong></td>
-    <td></td>
   </tr>
   <tr>
+    <td><img src="screenshots/aichat.png" width="450" alt="AI Assistant"></td>
     <td><img src="screenshots/settings.png" width="450" alt="Settings"></td>
-    <td></td>
   </tr>
 </table>
 
@@ -180,6 +181,9 @@ The Rust backend hot-reloads on save. The React frontend uses Vite HMR.
 - [x] Site templates (Laravel, WordPress, Fat-Free Framework)
 - [ ] Import/export environment configurations
 - [x] Auto-update mechanism
+- [x] AI Assistant (OpenRouter integration with tool calling)
+- [x] Password-free operation (no sudo for start/stop)
+- [x] Auto DNS resolver (dnsmasq on macOS)
 
 ## License
 
