@@ -35,17 +35,22 @@ export const useAppStore = create<AppStore>((set) => ({
       set({ initialized: true, systemInfo })
 
       // Check for updates in background (non-blocking)
-      tauri.checkForUpdate().then((update) => {
-        if (update) {
-          set({
-            updateAvailable: true,
-            updateVersion: update.version,
-            updateNotes: update.body,
-          })
-        }
-      }).catch(() => {
-        // Silently ignore update check failures
-      })
+      // Pre-check endpoint to avoid Rust-side ERROR logs when no release exists
+      fetch("https://github.com/unkownpr/lokcalDev/releases/latest/download/latest.json", { method: "HEAD" })
+        .then((res) => {
+          if (!res.ok) return
+          return tauri.checkForUpdate()
+        })
+        .then((update) => {
+          if (update) {
+            set({
+              updateAvailable: true,
+              updateVersion: update.version,
+              updateNotes: update.body,
+            })
+          }
+        })
+        .catch(() => {})
     } catch (err) {
       set({ error: String(err) })
     }

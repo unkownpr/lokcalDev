@@ -27,6 +27,7 @@ interface SiteCreateDialogProps {
     documentRoot: string,
     phpVersion: string,
     ssl: boolean,
+    template?: string,
   ) => Promise<void>
   phpVersions?: string[]
 }
@@ -38,6 +39,7 @@ export function SiteCreateDialog({ onSubmit, phpVersions = [] }: SiteCreateDialo
   const [documentRoot, setDocumentRoot] = useState("")
   const [phpVersion, setPhpVersion] = useState(phpVersions[0] ?? "")
   const [ssl, setSsl] = useState(false)
+  const [template, setTemplate] = useState("blank")
   const [submitting, setSubmitting] = useState(false)
 
   useEffect(() => {
@@ -57,13 +59,14 @@ export function SiteCreateDialog({ onSubmit, phpVersions = [] }: SiteCreateDialo
     if (!name || !domain || !documentRoot) return
     setSubmitting(true)
     try {
-      await onSubmit(name, domain, documentRoot, phpVersion, ssl)
+      await onSubmit(name, domain, documentRoot, phpVersion, ssl, template === "blank" ? undefined : template)
       setOpen(false)
       setName("")
       setDomain("")
       setDocumentRoot("")
       setPhpVersion(phpVersions[0] ?? "")
       setSsl(false)
+      setTemplate("blank")
     } finally {
       setSubmitting(false)
     }
@@ -90,6 +93,20 @@ export function SiteCreateDialog({ onSubmit, phpVersions = [] }: SiteCreateDialo
               value={name}
               onChange={(e) => handleNameChange(e.target.value)}
             />
+          </div>
+          <div className="space-y-1.5">
+            <Label>Template</Label>
+            <Select value={template} onValueChange={setTemplate}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="blank">Blank Site</SelectItem>
+                <SelectItem value="wordpress">WordPress</SelectItem>
+                <SelectItem value="laravel">Laravel</SelectItem>
+                <SelectItem value="fatfree">Fat-Free Framework</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="domain">Domain</Label>

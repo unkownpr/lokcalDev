@@ -37,6 +37,7 @@ impl TemplateManager {
         let result = match template {
             "wordpress" => Self::setup_wordpress(app, site_id).await,
             "laravel" => Self::setup_laravel(app, site_id).await,
+            "fatfree" => Self::setup_fatfree(app, site_id).await,
             _ => Err(AppError::Config(format!("Unknown template: {}", template))),
         };
 
@@ -225,6 +226,62 @@ require_once ABSPATH . 'wp-settings.php';
         }
 
         log::info!("Laravel installed for site {}", site_id);
+        Ok(())
+    }
+
+    // ── Fat-Free Framework ──────────────────────────────────────────
+
+    async fn setup_fatfree(app: &AppHandle, site_id: &str) -> Result<(), AppError> {
+        let site = SiteManager::get(site_id)?;
+        let doc_root = std::path::PathBuf::from(&site.document_root);
+        let download_id = format!("template-{}", site_id);
+
+        // 1. Download Fat-Free Framework
+        Self::emit_progress(app, site_id, "downloading", "Downloading Fat-Free Framework...");
+        let archive_path = doc_root.join("fatfree.zip");
+        DownloadManager::download_file(
+            app,
+            &download_id,
+            "https://github.com/bcosca/fatfree/archive/refs/heads/master.zip",
+            &archive_path,
+        )
+        .await?;
+
+        // 2. Extract
+        Self::emit_progress(app, site_id, "extracting", "Extracting Fat-Free Framework...");
+        DownloadManager::extract_zip(app, &download_id, &archive_path, &doc_root)?;
+
+        // 3. Delete archive
+        let _ = std::fs::remove_file(&archive_path);
+
+        // 4. Flatten fatfree-master/ subdirectory
+        Self::flatten_dir(&doc_root, "fatfree-")?;
+
+        // 5. Create tmp/ directory (F3 uses it for cache, sessions, etc.)
+        Self::emit_progress(app, site_id, "configuring", "Configuring Fat-Free Framework...");
+        let tmp_dir = doc_root.join("tmp");
+        std::fs::create_dir_all(&tmp_dir)?;
+
+        // 6. Create a basic index.php entry point if not present
+        let index_php = doc_root.join("index.php");
+        if !index_php.exists() {
+            let starter = r#"<?php
+$f3 = require('lib/base.php');
+
+$f3->set('DEBUG', 3);
+$f3->set('UI', 'ui/');
+$f3->set('TEMP', 'tmp/');
+
+$f3->route('GET /', function() {
+    echo '<h1>Fat-Free Framework</h1><p>Your F3 app is running.</p>';
+});
+
+$f3->run();
+"#;
+            std::fs::write(&index_php, starter)?;
+        }
+
+        log::info!("Fat-Free Framework installed for site {}", site_id);
         Ok(())
     }
 

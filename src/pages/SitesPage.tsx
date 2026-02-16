@@ -1,5 +1,5 @@
 import { useEffect } from "react"
-import { Globe, Trash2, ExternalLink } from "lucide-react"
+import { Globe, Trash2, ExternalLink, RotateCcw, Loader2 } from "lucide-react"
 import { open } from "@tauri-apps/plugin-shell"
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -12,7 +12,7 @@ import { useSiteStore } from "@/stores/siteStore"
 import { usePhpStore } from "@/stores/phpStore"
 
 export function SitesPage() {
-  const { sites, fetchSites, createSite, deleteSite } = useSiteStore()
+  const { sites, fetchSites, createSite, deleteSite, setupTemplate } = useSiteStore()
   const { versions, fetchVersions } = usePhpStore()
 
   useEffect(() => {
@@ -27,8 +27,8 @@ export function SitesPage() {
       <PageHeader title="Sites" description="Manage your local websites">
         <SiteCreateDialog
           phpVersions={installedPhpVersions}
-          onSubmit={async (name, domain, documentRoot, phpVersion, ssl) => {
-            await createSite(name, domain, documentRoot, phpVersion, ssl)
+          onSubmit={async (name, domain, documentRoot, phpVersion, ssl, template) => {
+            await createSite(name, domain, documentRoot, phpVersion, ssl, template)
           }}
         />
       </PageHeader>
@@ -49,12 +49,34 @@ export function SitesPage() {
                   <div>
                     <div className="flex items-center gap-2">
                       <span className="text-sm font-medium">{site.name}</span>
+                      {site.template && (
+                        <Badge variant="default" className="text-[10px]">
+                          {site.template === "wordpress" ? "WordPress" : site.template === "laravel" ? "Laravel" : "Fat-Free"}
+                        </Badge>
+                      )}
                       <Badge variant="outline" className="text-[10px]">
                         PHP {site.phpVersion}
                       </Badge>
                       {site.ssl && (
                         <Badge variant="secondary" className="text-[10px]">
                           SSL
+                        </Badge>
+                      )}
+                      {site.templateStatus === "installing" && (
+                        <Badge variant="secondary" className="text-[10px] gap-1">
+                          <Loader2 className="h-2.5 w-2.5 animate-spin" />
+                          Installing...
+                        </Badge>
+                      )}
+                      {site.templateStatus === "pending" && (
+                        <Badge variant="secondary" className="text-[10px] gap-1">
+                          <Loader2 className="h-2.5 w-2.5 animate-spin" />
+                          Pending...
+                        </Badge>
+                      )}
+                      {site.templateStatus === "failed" && (
+                        <Badge variant="destructive" className="text-[10px]">
+                          Setup Failed
                         </Badge>
                       )}
                     </div>
@@ -67,6 +89,16 @@ export function SitesPage() {
                   <span className="text-xs text-muted-foreground max-w-[200px] truncate">
                     {site.documentRoot}
                   </span>
+                  {site.templateStatus === "failed" && site.template && (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      title="Retry template setup"
+                      onClick={() => setupTemplate(site.id, site.template!)}
+                    >
+                      <RotateCcw className="h-3.5 w-3.5" />
+                    </Button>
+                  )}
                   <Button
                     size="sm"
                     variant="ghost"

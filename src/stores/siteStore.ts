@@ -46,10 +46,10 @@ export const useSiteStore = create<SiteStore>((set, get) => ({
     }
   },
 
-  createSite: async (name, domain, documentRoot, phpVersion, ssl) => {
+  createSite: async (name, domain, documentRoot, phpVersion, ssl, template) => {
     let site: Site | null = null
     try {
-      site = await tauri.siteCreate(name, domain, documentRoot, phpVersion, ssl)
+      site = await tauri.siteCreate(name, domain, documentRoot, phpVersion, ssl, template)
     } catch (err) {
       const msg = String(err)
       set({ error: msg })
@@ -100,6 +100,24 @@ export const useSiteStore = create<SiteStore>((set, get) => ({
     } else {
       toast.warning(`Site "${name}" created with warnings`, {
         description: "Some operations required admin access and were skipped.",
+      })
+    }
+
+    // Fire template setup in background if requested
+    if (template && site) {
+      get().setupTemplate(site.id, template)
+    }
+  },
+
+  setupTemplate: async (siteId, template) => {
+    try {
+      await tauri.siteSetupTemplate(siteId, template)
+      await get().fetchSites()
+      toast.success(`${template.charAt(0).toUpperCase() + template.slice(1)} installed successfully`)
+    } catch (err) {
+      await get().fetchSites()
+      toast.error(`${template.charAt(0).toUpperCase() + template.slice(1)} setup failed`, {
+        description: String(err),
       })
     }
   },
