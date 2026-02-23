@@ -17,11 +17,9 @@ pub fn nginx_get_info() -> Result<NginxInfo, AppError> {
 }
 
 /// Auto-start PHP-FPM for all PHP versions used by active sites.
-fn auto_start_required_fpm(state: &State<'_, AppState>) {
-    let sites = match SiteManager::list() {
-        Ok(s) => s,
-        Err(_) => return,
-    };
+/// If no site uses PHP (or no sites exist), starts the first installed PHP as default.
+pub(crate) fn auto_start_required_fpm(state: &State<'_, AppState>) {
+    let sites = SiteManager::list().unwrap_or_default();
 
     // Collect unique PHP versions from active sites
     let versions: HashSet<String> = sites
@@ -31,20 +29,20 @@ fn auto_start_required_fpm(state: &State<'_, AppState>) {
         .collect();
 
     let php_versions = PhpManager::list_versions();
+    let mut any_php_running = false;
 
     for version in &versions {
-        // Check if this PHP version is installed and not already running
         let php_info = php_versions.iter().find(|v| &v.version == version);
         if let Some(info) = php_info {
-            if info.installed && !info.running {
+            if info.running {
+                any_php_running = true;
+            } else if info.installed {
                 match PhpManager::start_fpm(version) {
                     Ok((child, pid)) => {
-                        // Store child process handle for cleanup on exit
                         let key = format!("php-fpm-{}", version);
                         if let Ok(mut children) = state.child_processes.lock() {
                             children.insert(key.clone(), child);
                         }
-                        // Update service state
                         let svc = ServiceInfo {
                             id: key.clone(),
                             name: format!("PHP-FPM {}", version),
@@ -58,11 +56,44 @@ fn auto_start_required_fpm(state: &State<'_, AppState>) {
                         if let Ok(mut services) = state.services.lock() {
                             services.insert(key, svc);
                         }
+                        any_php_running = true;
                         log::info!("Auto-started PHP-FPM {} for active sites", version);
                     }
                     Err(e) => {
                         log::warn!("Failed to auto-start PHP-FPM {}: {}", version, e);
                     }
+                }
+            }
+        }
+    }
+
+    // No site PHP running — start the first installed PHP version as default
+    if !any_php_running {
+        if let Some(info) = php_versions.iter().find(|v| v.installed && !v.running) {
+            let version = info.version.clone();
+            match PhpManager::start_fpm(&version) {
+                Ok((child, pid)) => {
+                    let key = format!("php-fpm-{}", version);
+                    if let Ok(mut children) = state.child_processes.lock() {
+                        children.insert(key.clone(), child);
+                    }
+                    let svc = ServiceInfo {
+                        id: key.clone(),
+                        name: format!("PHP-FPM {}", version),
+                        status: ServiceStatus::Running,
+                        port: Some(info.port),
+                        version: Some(version.clone()),
+                        pid: Some(pid),
+                        installed: true,
+                        initialized: true,
+                    };
+                    if let Ok(mut services) = state.services.lock() {
+                        services.insert(key, svc);
+                    }
+                    log::info!("Auto-started default PHP-FPM {}", version);
+                }
+                Err(e) => {
+                    log::warn!("Failed to auto-start default PHP-FPM {}: {}", version, e);
                 }
             }
         }

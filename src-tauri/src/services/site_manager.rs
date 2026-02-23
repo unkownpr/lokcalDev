@@ -318,16 +318,17 @@ impl SiteManager {
     }
 
     /// Add DNS entry for a domain.
-    /// On macOS: skip if dnsmasq resolver is configured (handles all .test domains).
-    /// On Windows/other: always add to hosts file.
+    /// On macOS: if dnsmasq resolver is configured, reload dnsmasq (wildcard handles all .tld).
+    /// Otherwise add to hosts file as fallback.
     fn ensure_dns_entry(domain: &str) {
         #[cfg(target_os = "macos")]
         {
-            // Extract TLD from domain (e.g. "test" from "mysite.test")
             let tld = domain.rsplit('.').next().unwrap_or("");
             let status = DnsManager::get_resolver_status(tld);
             if status.configured {
-                return; // dnsmasq handles it
+                // dnsmasq wildcard already handles all *.tld — reload to pick up any config changes
+                DnsManager::reload_dnsmasq();
+                return;
             }
         }
 
@@ -342,7 +343,9 @@ impl SiteManager {
             let tld = domain.rsplit('.').next().unwrap_or("");
             let status = DnsManager::get_resolver_status(tld);
             if status.configured {
-                return; // dnsmasq handles it
+                // dnsmasq wildcard handles removal automatically — reload to confirm
+                DnsManager::reload_dnsmasq();
+                return;
             }
         }
 

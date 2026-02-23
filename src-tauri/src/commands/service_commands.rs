@@ -1,3 +1,4 @@
+use crate::commands::nginx_commands::auto_start_required_fpm;
 use crate::error::AppError;
 use crate::services::mariadb_manager::MariaDbManager;
 use crate::services::nginx_manager::NginxManager;
@@ -125,6 +126,8 @@ pub fn start_service(
 ) -> Result<ServiceInfo, AppError> {
     match service_id.as_str() {
         "nginx" => {
+            // Auto-start PHP-FPM for active sites (+ default PHP if no sites)
+            auto_start_required_fpm(&state);
             let pid = NginxManager::start()?;
             let nginx_info = NginxManager::get_info();
 

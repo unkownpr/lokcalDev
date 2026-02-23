@@ -271,6 +271,17 @@ impl DnsManager {
         content.contains("nameserver 127.0.0.1") && content.contains("port 5353")
     }
 
+    /// Send SIGHUP to dnsmasq to reload its config without full restart.
+    #[cfg(target_os = "macos")]
+    pub fn reload_dnsmasq() {
+        if Self::is_dnsmasq_running() {
+            let _ = std::process::Command::new("pkill")
+                .args(["-HUP", "dnsmasq"])
+                .output();
+            log::info!("Sent SIGHUP to dnsmasq (config reload)");
+        }
+    }
+
     pub fn get_resolver_status(tld: &str) -> ResolverStatus {
         #[cfg(target_os = "macos")]
         {
