@@ -85,12 +85,6 @@ Download the latest release for your platform:
 - **macOS (Apple Silicon):** [Download .dmg](https://github.com/unkownpr/lokcalDev/releases/latest)
 - **Windows (x64):** [Download .exe](https://github.com/unkownpr/lokcalDev/releases/latest)
 
-> **macOS Gatekeeper note:** If macOS says the app "is damaged and can't be opened", run this in Terminal after installing:
-> ```bash
-> xattr -cr /Applications/LokcalDev.app
-> ```
-> This removes the quarantine flag that macOS adds to downloaded apps.
-
 ### From Source
 
 ```bash
