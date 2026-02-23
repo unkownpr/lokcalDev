@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { PageHeader } from "@/components/shared/PageHeader"
 import { useSslStore } from "@/stores/sslStore"
+import { useSiteStore } from "@/stores/siteStore"
 
 export function SslPage() {
   const {
@@ -30,6 +31,8 @@ export function SslPage() {
     setupResolver,
   } = useSslStore()
 
+  const { sites, fetchSites } = useSiteStore()
+
   const [newDomain, setNewDomain] = useState("")
   const [dnsDomain, setDnsDomain] = useState("")
   const [dnsIp, setDnsIp] = useState("127.0.0.1")
@@ -39,7 +42,8 @@ export function SslPage() {
     fetchCertificates()
     fetchDnsEntries()
     fetchResolverStatus()
-  }, [checkStatus, fetchCertificates, fetchDnsEntries, fetchResolverStatus])
+    fetchSites()
+  }, [checkStatus, fetchCertificates, fetchDnsEntries, fetchResolverStatus, fetchSites])
 
   return (
     <div>
@@ -155,7 +159,30 @@ export function SslPage() {
             </div>
           </Card>
 
-          {dnsEntries.length > 0 && (
+          {/* DNS Entries — dnsmasq aktifse sitelerden, değilse /etc/hosts'tan */}
+          {resolverStatus?.configured ? (
+            <div>
+              <h3 className="text-sm font-medium mb-3">Managed Domains</h3>
+              {sites.filter(s => s.active).length === 0 ? (
+                <p className="text-xs text-muted-foreground">No active sites yet.</p>
+              ) : (
+                <div className="space-y-1">
+                  {sites.filter(s => s.active).map((site) => (
+                    <div
+                      key={site.id}
+                      className="flex items-center justify-between py-2 px-3 rounded hover:bg-muted/50"
+                    >
+                      <div className="flex items-center gap-3">
+                        <span className="text-sm font-mono">{site.domain}</span>
+                        <span className="text-xs text-muted-foreground">127.0.0.1</span>
+                      </div>
+                      <Badge variant="secondary" className="text-[10px]">Auto DNS</Badge>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          ) : dnsEntries.length > 0 ? (
             <div>
               <h3 className="text-sm font-medium mb-3">DNS Entries (/etc/hosts)</h3>
               <div className="space-y-1">
@@ -180,7 +207,7 @@ export function SslPage() {
                 ))}
               </div>
             </div>
-          )}
+          ) : null}
         </TabsContent>
 
         <TabsContent value="setup" className="mt-4 space-y-4">

@@ -333,7 +333,9 @@ impl SiteManager {
         }
 
         // Fallback: add to hosts file (may need admin on macOS/Windows)
-        let _ = DnsManager::add_entry(domain, "127.0.0.1");
+        if let Err(e) = DnsManager::add_entry(domain, "127.0.0.1") {
+            log::warn!("Failed to add DNS entry for {}: {}", domain, e);
+        }
     }
 
     /// Remove DNS entry for a domain.
@@ -349,6 +351,8 @@ impl SiteManager {
             }
         }
 
-        let _ = DnsManager::remove_entry(domain);
+        if let Err(e) = DnsManager::remove_entry(domain) {
+            log::warn!("Failed to remove DNS entry for {}: {}", domain, e);
+        }
     }
 }
