@@ -1,7 +1,7 @@
 {
   "name": "lokcaldev",
   "private": true,
-  "version": "0.1.4",
+  "version": "0.1.5",
   "description": "Local development environment manager for macOS and Windows",
   "author": "ssilistre.dev",
   "license": "SEE LICENSE IN LICENSE",
