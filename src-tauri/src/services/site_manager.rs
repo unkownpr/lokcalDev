@@ -22,6 +22,11 @@ pub struct Site {
     pub template: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub template_status: Option<String>,
+    /// Transient field: set when DNS entry could not be created during site creation.
+    /// Not persisted to disk (skipped in serialization when None).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
+    pub dns_warning: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -88,7 +93,7 @@ impl SiteManager {
 
         let has_template = req.template.is_some();
         let id = Uuid::new_v4().to_string();
-        let site = Site {
+        let mut site = Site {
             id: id.clone(),
             name: req.name,
             domain: req.domain.clone(),
@@ -99,6 +104,7 @@ impl SiteManager {
             created_at: chrono::Utc::now().to_rfc3339(),
             template_status: if has_template { Some("pending".to_string()) } else { None },
             template: req.template,
+            dns_warning: None,
         };
 
         // Save site config
@@ -157,7 +163,11 @@ impl SiteManager {
         NginxConfigGenerator::write_site_config(&req.domain, &nginx_config)?;
 
         // Add DNS entry for the domain (hosts file fallback when dnsmasq not configured)
-        Self::ensure_dns_entry(&req.domain);
+        if let Err(e) = Self::ensure_dns_entry(&req.domain) {
+            let warning = format!("DNS entry could not be added for '{}': {}", req.domain, e);
+            log::warn!("{}", warning);
+            site.dns_warning = Some(warning);
+        }
 
         log::info!("Created site: {} ({})", site.name, site.domain);
         Ok(site)
@@ -320,7 +330,7 @@ impl SiteManager {
     /// Add DNS entry for a domain.
     /// On macOS: if dnsmasq resolver is configured, reload dnsmasq (wildcard handles all .tld).
     /// Otherwise add to hosts file as fallback.
-    fn ensure_dns_entry(domain: &str) {
+    fn ensure_dns_entry(domain: &str) -> Result<(), AppError> {
         #[cfg(target_os = "macos")]
         {
             let tld = domain.rsplit('.').next().unwrap_or("");
@@ -328,14 +338,12 @@ impl SiteManager {
             if status.configured {
                 // dnsmasq wildcard already handles all *.tld — reload to pick up any config changes
                 DnsManager::reload_dnsmasq();
-                return;
+                return Ok(());
             }
         }
 
         // Fallback: add to hosts file (may need admin on macOS/Windows)
-        if let Err(e) = DnsManager::add_entry(domain, "127.0.0.1") {
-            log::warn!("Failed to add DNS entry for {}: {}", domain, e);
-        }
+        DnsManager::add_entry(domain, "127.0.0.1")
     }
 
     /// Remove DNS entry for a domain.

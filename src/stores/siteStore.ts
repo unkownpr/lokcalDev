@@ -80,7 +80,14 @@ export const useSiteStore = create<SiteStore>((set, get) => ({
     } catch {}
 
     await get().fetchSites()
-    if (sslActive || !ssl) {
+
+    // Show DNS warning if the entry could not be added
+    if (site.dnsWarning) {
+      toast.warning("DNS entry could not be added", {
+        description: `${domain} could not be resolved. Set up DNS Resolver from the SSL page or add the hosts entry manually.`,
+        duration: 8000,
+      })
+    } else if (sslActive || !ssl) {
       toast.success(`Site "${name}" created`)
     }
 

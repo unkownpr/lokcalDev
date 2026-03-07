@@ -16,6 +16,8 @@ dist-ssr
 *.key
 .env
 .env.local
+build-mac.sh
+.config
 
 # Editor directories and files
 .vscode/*

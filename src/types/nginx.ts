@@ -19,4 +19,5 @@ export interface Site {
   createdAt: string
   template?: string
   templateStatus?: string
+  dnsWarning?: string
 }
