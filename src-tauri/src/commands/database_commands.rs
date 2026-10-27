@@ -8,7 +8,7 @@ pub async fn mariadb_install(app: AppHandle) -> Result<MariaDbInfo, AppError> {
     MariaDbManager::install(&app).await
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn mariadb_get_info() -> Result<MariaDbInfo, AppError> {
     Ok(MariaDbManager::get_info())
 }
@@ -129,17 +129,17 @@ pub fn mariadb_restart(state: State<'_, AppState>) -> Result<ServiceInfo, AppErr
     Ok(info)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn database_list() -> Result<Vec<DatabaseEntry>, AppError> {
     MariaDbManager::list_databases()
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn database_create(name: String) -> Result<(), AppError> {
     MariaDbManager::create_database(&name)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn database_drop(name: String) -> Result<(), AppError> {
     MariaDbManager::drop_database(&name)
 }

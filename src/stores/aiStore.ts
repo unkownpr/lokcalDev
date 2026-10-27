@@ -10,10 +10,13 @@ interface AiStore {
   unlisten: UnlistenFn | null
 
   sendMessage: (content: string) => Promise<void>
-  executeToolCalls: (toolCalls: AiToolCall[]) => Promise<void>
+  executeToolCalls: (toolCalls: AiToolCall[], round?: number) => Promise<void>
   clearMessages: () => void
   cleanup: () => void
 }
+
+// Each round executes real actions and costs an API request; stop a model stuck in a tool loop.
+const MAX_TOOL_ROUNDS = 8
 
 export const useAiStore = create<AiStore>((set, get) => ({
   messages: [],
@@ -22,7 +25,9 @@ export const useAiStore = create<AiStore>((set, get) => ({
   unlisten: null,
 
   sendMessage: async (content: string) => {
-    const { messages, unlisten: prevUnlisten } = get()
+    const { messages, unlisten: prevUnlisten, streaming } = get()
+    // A second listener on "ai-stream" would mix two responses into one message
+    if (streaming) return
 
     // Cleanup previous listener
     if (prevUnlisten) {
@@ -105,7 +110,13 @@ export const useAiStore = create<AiStore>((set, get) => ({
     }
   },
 
-  executeToolCalls: async (toolCalls: AiToolCall[]) => {
+  executeToolCalls: async (toolCalls: AiToolCall[], round = 0) => {
+    if (round >= MAX_TOOL_ROUNDS) {
+      set({ streaming: false, error: "Too many consecutive tool calls, stopped" })
+      return
+    }
+    // Keep the input locked while tools run
+    set({ streaming: true })
     const { messages } = get()
 
     // Execute each tool call and collect results
@@ -177,7 +188,7 @@ export const useAiStore = create<AiStore>((set, get) => ({
           set({ unlisten: null })
 
           if (receivedToolCalls && receivedToolCalls.length > 0) {
-            get().executeToolCalls(receivedToolCalls)
+            get().executeToolCalls(receivedToolCalls, round + 1)
           }
           break
 

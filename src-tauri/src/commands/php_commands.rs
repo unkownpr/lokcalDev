@@ -4,7 +4,7 @@ use crate::services::utils;
 use crate::state::{AppState, ServiceInfo, ServiceStatus};
 use tauri::{AppHandle, State};
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn php_list_versions() -> Result<Vec<PhpVersion>, AppError> {
     Ok(PhpManager::list_versions())
 }
@@ -160,7 +160,7 @@ pub fn php_set_ini_directive(
     PhpManager::set_ini_directive(&version, &key, &value)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn php_list_extensions(version: String) -> Result<Vec<PhpExtension>, AppError> {
     PhpManager::list_extensions(&version)
 }

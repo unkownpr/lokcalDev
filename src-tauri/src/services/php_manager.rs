@@ -156,7 +156,7 @@ impl PhpManager {
 
     /// Reject anything that isn't a supported version: the string is used in paths
     /// (`remove_dir_all`), brew formula names and service ids.
-    fn validate_version(version: &str) -> Result<(), AppError> {
+    pub fn validate_version(version: &str) -> Result<(), AppError> {
         if PHP_VERSIONS.contains(&version) {
             Ok(())
         } else {
@@ -215,12 +215,15 @@ impl PhpManager {
 
         // Tap shivammathur/php
         Self::emit_progress(app, &dl_id, "extracting", "Tapping shivammathur/php...");
-        let tap = Command::new("brew")
-            .args(["tap", "shivammathur/php"])
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .output()
-            .map_err(|e| AppError::Process(format!("Failed to tap: {}", e)))?;
+        let tap = utils::run_blocking(|| {
+            Command::new("brew")
+                .args(["tap", "shivammathur/php"])
+                .stdout(Stdio::piped())
+                .stderr(Stdio::piped())
+                .output()
+        })
+        .await?
+        .map_err(|e| AppError::Process(format!("Failed to tap: {}", e)))?;
 
         if !tap.status.success() {
             let stderr = String::from_utf8_lossy(&tap.stderr);
@@ -234,16 +237,19 @@ impl PhpManager {
         // Install PHP
         Self::emit_progress(app, &dl_id, "extracting", &format!("Installing PHP {} via Homebrew...", version));
         let formula = format!("shivammathur/php/php@{}", version);
-        let install = Command::new("brew")
-            .args(["install", &formula])
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .output()
-            .map_err(|e| {
-                let msg = format!("brew install failed: {}", e);
-                Self::emit_progress(app, &dl_id, "failed", &msg);
-                AppError::Process(msg)
-            })?;
+        let install = utils::run_blocking(move || {
+            Command::new("brew")
+                .args(["install", &formula])
+                .stdout(Stdio::piped())
+                .stderr(Stdio::piped())
+                .output()
+        })
+        .await?
+        .map_err(|e| {
+            let msg = format!("brew install failed: {}", e);
+            Self::emit_progress(app, &dl_id, "failed", &msg);
+            AppError::Process(msg)
+        })?;
 
         // Check result by binary existence, not exit code
         // brew may return non-zero for warnings that don't prevent installation
@@ -294,7 +300,7 @@ impl PhpManager {
         let archive_path = paths::get_php_dir().join(format!("php-{}.zip", version));
 
         DownloadManager::download_file(app, &format!("php-{}", version), &url, &archive_path).await?;
-        DownloadManager::extract_zip(app, &format!("php-{}", version), &archive_path, &version_dir)?;
+        DownloadManager::extract_zip(app, &format!("php-{}", version), &archive_path, &version_dir).await?;
 
         let _ = std::fs::remove_file(&archive_path);
         Self::ensure_php_ini_default(version)?;
@@ -409,11 +415,26 @@ impl PhpManager {
                 })?
         };
 
+        let mut child = child;
         let pid = child.id();
 
         // Write PID file
         let pid_path = Self::get_fpm_pid_path(version);
         let _ = std::fs::write(&pid_path, pid.to_string());
+
+        #[cfg(target_os = "windows")]
+        let log_path: Option<PathBuf> = None;
+        #[cfg(not(target_os = "windows"))]
+        let log_path = Some(Self::get_fpm_log_path(version));
+        if let Err(e) = utils::ensure_still_running(
+            &mut child,
+            &format!("PHP-FPM {}", version),
+            log_path.as_deref(),
+            std::time::Duration::from_millis(500),
+        ) {
+            let _ = std::fs::remove_file(&pid_path);
+            return Err(e);
+        }
 
         log::info!(
             "Started PHP-FPM {} on port {} (PID: {})",

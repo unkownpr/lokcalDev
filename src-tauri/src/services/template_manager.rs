@@ -76,7 +76,7 @@ impl TemplateManager {
 
         // 2. Extract
         Self::emit_progress(app, site_id, "extracting", "Extracting WordPress...");
-        DownloadManager::extract_zip(app, &download_id, &archive_path, &doc_root)?;
+        DownloadManager::extract_zip(app, &download_id, &archive_path, &doc_root).await?;
 
         // 3. Delete archive
         let _ = std::fs::remove_file(&archive_path);
@@ -201,7 +201,7 @@ require_once ABSPATH . 'wp-settings.php';
 
         // 2. Extract
         Self::emit_progress(app, site_id, "extracting", "Extracting Laravel...");
-        DownloadManager::extract_zip(app, &download_id, &archive_path, &doc_root)?;
+        DownloadManager::extract_zip(app, &download_id, &archive_path, &doc_root).await?;
 
         // 3. Delete archive
         let _ = std::fs::remove_file(&archive_path);
@@ -245,7 +245,7 @@ require_once ABSPATH . 'wp-settings.php';
 
         // 2. Extract
         Self::emit_progress(app, site_id, "extracting", "Extracting Fat-Free Framework...");
-        DownloadManager::extract_zip(app, &download_id, &archive_path, &doc_root)?;
+        DownloadManager::extract_zip(app, &download_id, &archive_path, &doc_root).await?;
 
         // 3. Delete archive
         let _ = std::fs::remove_file(&archive_path);

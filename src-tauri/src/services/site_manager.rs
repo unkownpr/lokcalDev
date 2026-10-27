@@ -3,6 +3,7 @@ use crate::error::AppError;
 use crate::services::dns_manager::DnsManager;
 use crate::services::nginx_config::NginxConfigGenerator;
 use crate::services::nginx_manager::NginxManager;
+use crate::services::php_manager::PhpManager;
 use crate::services::utils;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -115,6 +116,7 @@ impl SiteManager {
     pub fn create(req: CreateSiteRequest) -> Result<Site, AppError> {
         utils::validate_domain(&req.domain)?;
         Self::ensure_domain_free(&req.domain, None)?;
+        PhpManager::validate_version(&req.php_version)?;
 
         // Ensure sites directory exists
         let sites_dir = paths::get_sites_dir();
@@ -213,11 +215,18 @@ impl SiteManager {
         if let Some(domain) = req.domain {
             site.domain = domain;
         }
-        if let Some(document_root) = req.document_root {
-            site.document_root = document_root;
-        }
         if let Some(php_version) = req.php_version {
+            // Only check on change so sites saved with an older version can still be edited
+            if php_version != site.php_version {
+                PhpManager::validate_version(&php_version)?;
+            }
             site.php_version = php_version;
+        }
+        if let Some(document_root) = req.document_root {
+            if document_root != site.document_root {
+                std::fs::create_dir_all(&document_root)?;
+            }
+            site.document_root = document_root;
         }
         if let Some(ssl) = req.ssl {
             site.ssl = ssl;

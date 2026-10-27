@@ -102,6 +102,78 @@ pub fn stop_process(pid: u32, timeout: std::time::Duration) {
     wait_for_exit(pid, std::time::Duration::from_secs(2));
 }
 
+/// Run blocking work (brew, archive extraction, service restarts) on the blocking
+/// thread pool so long installs don't pin an async runtime worker.
+pub async fn run_blocking<T, F>(f: F) -> Result<T, AppError>
+where
+    F: FnOnce() -> T + Send + 'static,
+    T: Send + 'static,
+{
+    tauri::async_runtime::spawn_blocking(f)
+        .await
+        .map_err(|e| AppError::Process(format!("Background task failed: {}", e)))
+}
+
+/// Run `detect` (which spawns `binary --version` or similar) only when `binary` changed
+/// since the last successful call, keyed on its path and mtime. Status polling calls
+/// this every few seconds; the version only changes on install/upgrade.
+pub fn cached_version(binary: &Path, detect: impl FnOnce() -> Option<String>) -> Option<String> {
+    use std::collections::HashMap;
+    use std::sync::{Mutex, OnceLock};
+    use std::time::SystemTime;
+    static CACHE: OnceLock<Mutex<HashMap<PathBuf, (SystemTime, String)>>> = OnceLock::new();
+
+    let mtime = std::fs::metadata(binary).and_then(|m| m.modified()).ok();
+    let cache = CACHE.get_or_init(|| Mutex::new(HashMap::new()));
+    if let (Some(mtime), Ok(map)) = (mtime, cache.lock()) {
+        if let Some((cached_mtime, version)) = map.get(binary) {
+            if *cached_mtime == mtime {
+                return Some(version.clone());
+            }
+        }
+    }
+
+    let version = detect()?;
+    if let (Some(mtime), Ok(mut map)) = (mtime, cache.lock()) {
+        map.insert(binary.to_path_buf(), (mtime, version.clone()));
+    }
+    Some(version)
+}
+
+/// Give a freshly spawned service `grace` to fail. If it already exited (bad config,
+/// port in use, uninitialized data dir), return an error carrying the tail of its log
+/// instead of reporting a dead PID as running.
+pub fn ensure_still_running(
+    child: &mut std::process::Child,
+    name: &str,
+    log_path: Option<&Path>,
+    grace: std::time::Duration,
+) -> Result<(), AppError> {
+    let deadline = std::time::Instant::now() + grace;
+    loop {
+        if let Ok(Some(status)) = child.try_wait() {
+            let tail = log_path
+                .and_then(|p| std::fs::read_to_string(p).ok())
+                .map(|log| {
+                    let lines: Vec<&str> = log.lines().collect();
+                    lines[lines.len().saturating_sub(20)..].join("\n")
+                })
+                .unwrap_or_default();
+            return Err(AppError::Process(format!(
+                "{} exited immediately ({}){}{}",
+                name,
+                status,
+                if tail.is_empty() { "" } else { ":\n" },
+                tail
+            )));
+        }
+        if std::time::Instant::now() >= deadline {
+            return Ok(());
+        }
+        std::thread::sleep(std::time::Duration::from_millis(100));
+    }
+}
+
 /// Get the Homebrew prefix path (macOS only). Cached after first call.
 #[cfg(target_os = "macos")]
 pub fn get_brew_prefix() -> PathBuf {

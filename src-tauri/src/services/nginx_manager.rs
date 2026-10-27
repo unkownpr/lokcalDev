@@ -98,10 +98,14 @@ impl NginxManager {
 
     fn detect_version() -> Option<String> {
         let binary = Self::get_nginx_binary();
+        utils::cached_version(&binary, || Self::run_version_command(&binary))
+    }
+
+    fn run_version_command(binary: &std::path::Path) -> Option<String> {
         if !binary.exists() {
             return None;
         }
-        Command::new(&binary)
+        Command::new(binary)
             .arg("-v")
             .output()
             .ok()
@@ -127,16 +131,19 @@ impl NginxManager {
 
         Self::emit_progress(app, "extracting", "Installing Nginx via Homebrew...");
 
-        let install = Command::new("brew")
-            .args(["install", "nginx"])
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .output()
-            .map_err(|e| {
-                let msg = format!("brew install failed: {}", e);
-                Self::emit_progress(app, "failed", &msg);
-                AppError::Process(msg)
-            })?;
+        let install = utils::run_blocking(|| {
+            Command::new("brew")
+                .args(["install", "nginx"])
+                .stdout(Stdio::piped())
+                .stderr(Stdio::piped())
+                .output()
+        })
+        .await?
+        .map_err(|e| {
+            let msg = format!("brew install failed: {}", e);
+            Self::emit_progress(app, "failed", &msg);
+            AppError::Process(msg)
+        })?;
 
         // Check result by binary existence, not exit code
         // brew may return non-zero for warnings that don't prevent installation
@@ -172,7 +179,7 @@ impl NginxManager {
         let archive_path = nginx_dir.join("nginx.zip");
 
         DownloadManager::download_file(app, "nginx", &url, &archive_path).await?;
-        DownloadManager::extract_zip(app, "nginx", &archive_path, &nginx_dir)?;
+        DownloadManager::extract_zip(app, "nginx", &archive_path, &nginx_dir).await?;
 
         let _ = std::fs::remove_file(&archive_path);
 

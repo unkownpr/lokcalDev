@@ -1,3 +1,4 @@
+use crate::commands::service_commands;
 use crate::config::app_config::AppConfig;
 use crate::config::paths;
 use crate::error::AppError;
@@ -8,7 +9,8 @@ use crate::services::site_manager::{CreateSiteRequest, SiteManager};
 use futures_util::StreamExt;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
-use tauri::{AppHandle, Emitter};
+use crate::state::AppState;
+use tauri::{AppHandle, Emitter, State};
 
 // ── Types ─────────────────────────────────────────────────────────
 
@@ -395,7 +397,11 @@ pub async fn chat_stream(app: &AppHandle, messages: Vec<AiMessage>) -> Result<()
 
 // ── Tool Execution ────────────────────────────────────────────────
 
-pub fn execute_tool(tool_name: &str, arguments: &str) -> Result<String, AppError> {
+pub fn execute_tool(
+    state: State<'_, AppState>,
+    tool_name: &str,
+    arguments: &str,
+) -> Result<String, AppError> {
     let args: Value = serde_json::from_str(arguments).unwrap_or(json!({}));
 
     match tool_name {
@@ -436,45 +442,21 @@ pub fn execute_tool(tool_name: &str, arguments: &str) -> Result<String, AppError
             Ok(serde_json::to_string_pretty(&services).unwrap_or_default())
         }
 
+        // Go through the same commands as the UI so child processes are tracked,
+        // reaped and shut down with the app, and service state stays in sync.
         "start_service" => {
             let service_id = args["service_id"].as_str().unwrap_or("");
-            match service_id {
-                "nginx" => {
-                    NginxManager::start()?;
-                    Ok(format!("Nginx started successfully on port {}", NginxManager::get_info().port))
-                }
-                "mariadb" => {
-                    let _child = MariaDbManager::start()?;
-                    // Note: child process is not tracked here, service_commands handles that
-                    Ok("MariaDB started successfully".to_string())
-                }
-                id if id.starts_with("php-fpm-") => {
-                    let version = id.strip_prefix("php-fpm-").unwrap();
-                    let (_child, _pid) = PhpManager::start_fpm(version)?;
-                    Ok(format!("PHP-FPM {} started successfully", version))
-                }
-                _ => Err(AppError::Service(format!("Unknown service: {}", service_id))),
-            }
+            let info = service_commands::start_service(state, service_id.to_string())?;
+            Ok(match info.port {
+                Some(port) => format!("{} started successfully on port {}", info.name, port),
+                None => format!("{} started successfully", info.name),
+            })
         }
 
         "stop_service" => {
             let service_id = args["service_id"].as_str().unwrap_or("");
-            match service_id {
-                "nginx" => {
-                    NginxManager::stop()?;
-                    Ok("Nginx stopped successfully".to_string())
-                }
-                "mariadb" => {
-                    MariaDbManager::stop()?;
-                    Ok("MariaDB stopped successfully".to_string())
-                }
-                id if id.starts_with("php-fpm-") => {
-                    let version = id.strip_prefix("php-fpm-").unwrap();
-                    PhpManager::stop_fpm(version)?;
-                    Ok(format!("PHP-FPM {} stopped successfully", version))
-                }
-                _ => Err(AppError::Service(format!("Unknown service: {}", service_id))),
-            }
+            let info = service_commands::stop_service(state, service_id.to_string())?;
+            Ok(format!("{} stopped successfully", info.name))
         }
 
         "list_sites" => {

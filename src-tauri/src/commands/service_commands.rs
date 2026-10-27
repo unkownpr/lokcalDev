@@ -8,7 +8,7 @@ use crate::services::utils;
 use crate::state::{AppState, ServiceInfo, ServiceStatus};
 use tauri::State;
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn get_all_services(state: State<'_, AppState>) -> Result<Vec<ServiceInfo>, AppError> {
     // Reap tracked children that exited on their own so they stop showing as running.
     if let Ok(mut children) = state.child_processes.lock() {

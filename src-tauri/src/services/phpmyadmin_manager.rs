@@ -80,7 +80,7 @@ impl PhpMyAdminManager {
         DownloadManager::download_file(app, "phpmyadmin", &url, &archive_path).await?;
 
         Self::emit_progress(app, "extracting", "Extracting phpMyAdmin...");
-        DownloadManager::extract_zip(app, "phpmyadmin", &archive_path, &pma_dir)?;
+        DownloadManager::extract_zip(app, "phpmyadmin", &archive_path, &pma_dir).await?;
 
         let _ = std::fs::remove_file(&archive_path);
 
@@ -91,7 +91,7 @@ impl PhpMyAdminManager {
         Self::create_config()?;
 
         // Regenerate nginx config to add /phpmyadmin location and reload
-        Self::refresh_nginx()?;
+        utils::run_blocking(Self::refresh_nginx).await??;
 
         Self::emit_progress(app, "completed", "phpMyAdmin installed");
         log::info!("phpMyAdmin installed to {}", pma_dir.display());

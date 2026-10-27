@@ -11,7 +11,7 @@ pub async fn nginx_install(app: AppHandle) -> Result<NginxInfo, AppError> {
     NginxManager::install(&app).await
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn nginx_get_info() -> Result<NginxInfo, AppError> {
     Ok(NginxManager::get_info())
 }
