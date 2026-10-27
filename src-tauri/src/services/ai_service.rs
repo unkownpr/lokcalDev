@@ -57,6 +57,31 @@ pub struct AiStreamChunk {
     pub error: Option<String>,
 }
 
+/// phpMyAdmin has no process of its own; service_commands only reports its status.
+fn reject_phpmyadmin(service_id: &str) -> Result<(), AppError> {
+    if service_id == "phpmyadmin" {
+        return Err(AppError::Service(
+            "phpMyAdmin has no process; start or stop MariaDB instead".into(),
+        ));
+    }
+    Ok(())
+}
+
+/// Reload a running nginx after a site config change (the UI does the same via nginxReload).
+/// Returns a note for the model when the reload failed so it does not claim the site is live.
+fn reload_nginx_note() -> String {
+    if !NginxManager::get_info().running {
+        return String::new();
+    }
+    match NginxManager::reload() {
+        Ok(()) => String::new(),
+        Err(e) => {
+            log::warn!("Nginx reload after AI site change failed: {}", e);
+            format!("\nWarning: nginx reload failed, changes are not live yet: {}", e)
+        }
+    }
+}
+
 // ── Tool Definitions ──────────────────────────────────────────────
 
 fn get_tool_definitions() -> Vec<Value> {
@@ -446,6 +471,7 @@ pub fn execute_tool(
         // reaped and shut down with the app, and service state stays in sync.
         "start_service" => {
             let service_id = args["service_id"].as_str().unwrap_or("");
+            reject_phpmyadmin(service_id)?;
             let info = service_commands::start_service(state, service_id.to_string())?;
             Ok(match info.port {
                 Some(port) => format!("{} started successfully on port {}", info.name, port),
@@ -455,6 +481,7 @@ pub fn execute_tool(
 
         "stop_service" => {
             let service_id = args["service_id"].as_str().unwrap_or("");
+            reject_phpmyadmin(service_id)?;
             let info = service_commands::stop_service(state, service_id.to_string())?;
             Ok(format!("{} stopped successfully", info.name))
         }
@@ -501,8 +528,12 @@ pub fn execute_tool(
 
             let site = SiteManager::create(req)?;
             Ok(format!(
-                "Site '{}' created successfully at {}\nDomain: {}\nPHP: {}",
-                site.name, site.document_root, site.domain, site.php_version
+                "Site '{}' created successfully at {}\nDomain: {}\nPHP: {}{}",
+                site.name,
+                site.document_root,
+                site.domain,
+                site.php_version,
+                reload_nginx_note()
             ))
         }
 
@@ -515,7 +546,12 @@ pub fn execute_tool(
                 .ok_or_else(|| AppError::NotFound(format!("Site with domain '{}' not found", domain)))?;
 
             SiteManager::delete(&site.id)?;
-            Ok(format!("Site '{}' ({}) deleted successfully", site.name, domain))
+            Ok(format!(
+                "Site '{}' ({}) deleted successfully{}",
+                site.name,
+                domain,
+                reload_nginx_note()
+            ))
         }
 
         "write_file" => {

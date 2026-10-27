@@ -99,6 +99,19 @@ impl SiteManager {
         }
     }
 
+    /// The document root is written into a quoted nginx `root "..."` directive; characters that
+    /// would break out of it make nginx reject the config for every site.
+    fn validate_document_root(path: &str) -> Result<(), AppError> {
+        if path.trim().is_empty()
+            || path.contains(['"', ';', '{', '}', '$', '\r', '\n'])
+        {
+            return Err(AppError::Config(
+                "Document root contains characters not allowed in nginx config".into(),
+            ));
+        }
+        Ok(())
+    }
+
     /// Sites share nginx config, certificate and hosts entry by domain, so domains must be unique.
     fn ensure_domain_free(domain: &str, except_id: Option<&str>) -> Result<(), AppError> {
         let taken = Self::list()?
@@ -115,6 +128,7 @@ impl SiteManager {
 
     pub fn create(req: CreateSiteRequest) -> Result<Site, AppError> {
         utils::validate_domain(&req.domain)?;
+        Self::validate_document_root(&req.document_root)?;
         Self::ensure_domain_free(&req.domain, None)?;
         PhpManager::validate_version(&req.php_version)?;
 
@@ -137,11 +151,6 @@ impl SiteManager {
             template: req.template,
             dns_warning: None,
         };
-
-        // Save site config
-        let toml_str = toml::to_string_pretty(&site)
-            .map_err(|e| AppError::Config(e.to_string()))?;
-        std::fs::write(Self::get_site_file(&id), &toml_str)?;
 
         // Create document root if it doesn't exist
         let doc_root = std::path::Path::new(&req.document_root);
@@ -190,6 +199,12 @@ impl SiteManager {
         );
         NginxConfigGenerator::write_site_config(&req.domain, &nginx_config)?;
 
+        // Persist only after the fallible setup succeeded, so a failed create leaves no
+        // half-made site behind that would also block a retry with the same domain.
+        let toml_str = toml::to_string_pretty(&site)
+            .map_err(|e| AppError::Config(e.to_string()))?;
+        std::fs::write(Self::get_site_file(&id), &toml_str)?;
+
         // Add DNS entry for the domain (hosts file fallback when dnsmasq not configured)
         if let Err(e) = Self::ensure_dns_entry(&req.domain) {
             let warning = format!("DNS entry could not be added for '{}': {}", req.domain, e);
@@ -224,6 +239,7 @@ impl SiteManager {
         }
         if let Some(document_root) = req.document_root {
             if document_root != site.document_root {
+                Self::validate_document_root(&document_root)?;
                 std::fs::create_dir_all(&document_root)?;
             }
             site.document_root = document_root;

@@ -112,7 +112,18 @@ export const useAiStore = create<AiStore>((set, get) => ({
 
   executeToolCalls: async (toolCalls: AiToolCall[], round = 0) => {
     if (round >= MAX_TOOL_ROUNDS) {
-      set({ streaming: false, error: "Too many consecutive tool calls, stopped" })
+      // Answer every pending call so the history stays valid for the next request
+      // (the API rejects assistant tool_calls without matching tool messages).
+      const skipped: AiMessage[] = toolCalls.map((tc) => ({
+        role: "tool",
+        content: "Error: tool round limit reached",
+        toolCallId: tc.id,
+      }))
+      set((state) => ({
+        messages: [...state.messages, ...skipped],
+        streaming: false,
+        error: "Too many consecutive tool calls, stopped",
+      }))
       return
     }
     // Keep the input locked while tools run

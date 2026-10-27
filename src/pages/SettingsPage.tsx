@@ -92,7 +92,7 @@ export function SettingsPage() {
 
   const handleSave = async () => {
     if (!form) return
-    await saveSettings(form)
+    if (!(await saveSettings(form))) return
     setSaved(true)
     setTimeout(() => setSaved(false), 2000)
   }
@@ -181,7 +181,7 @@ export function SettingsPage() {
               <Input
                 type="number"
                 value={form.nginxPort}
-                onChange={(e) => setForm({ ...form, nginxPort: parseInt(e.target.value) || 80 })}
+                onChange={(e) => setForm({ ...form, nginxPort: parseInt(e.target.value) || 8080 })}
               />
             </div>
           </Card>

@@ -2,6 +2,7 @@ import { create } from "zustand"
 import { toast } from "sonner"
 import type { SystemInfo } from "@/types/config"
 import * as tauri from "@/lib/tauri"
+import { useSettingsStore } from "@/stores/settingsStore"
 
 interface AppStore {
   initialized: boolean
@@ -16,6 +17,23 @@ interface AppStore {
   initialize: () => Promise<void>
   checkForUpdate: () => Promise<void>
   installUpdate: () => Promise<void>
+}
+
+/** Start MariaDB and Nginx if installed and stopped; Nginx starts the PHP-FPM versions its sites need. */
+async function autoStartServices() {
+  try {
+    const services = await tauri.getAllServices()
+    for (const id of ["mariadb", "nginx"]) {
+      const svc = services.find((s) => s.id === id)
+      if (!svc || !svc.installed || svc.status === "running") continue
+      if (id === "mariadb" && !svc.initialized) continue
+      await tauri.startService(id).catch((err) => {
+        toast.error(`Auto-start failed for ${svc.name}`, { description: String(err) })
+      })
+    }
+  } catch (err) {
+    console.warn("Auto-start services failed:", err)
+  }
 }
 
 export const useAppStore = create<AppStore>((set) => ({
@@ -35,8 +53,15 @@ export const useAppStore = create<AppStore>((set) => ({
       const systemInfo = await tauri.getSystemInfo()
       set({ initialized: true, systemInfo })
 
-      // Ensure dnsmasq is running for .test domain resolution (no password needed)
-      tauri.dnsEnsureDnsmasqRunning("test").catch(() => {})
+      await useSettingsStore.getState().fetchSettings()
+      const settings = useSettingsStore.getState().config
+
+      // Ensure dnsmasq is running for local domain resolution (no password needed)
+      tauri.dnsEnsureDnsmasqRunning(settings?.tld ?? "test").catch(() => {})
+
+      if (settings?.autoStartServices) {
+        autoStartServices()
+      }
 
       // Check for updates in background (non-blocking)
       // Pre-check endpoint to avoid Rust-side ERROR logs when no release exists

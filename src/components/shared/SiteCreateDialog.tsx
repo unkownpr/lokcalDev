@@ -19,6 +19,7 @@ import {
 } from "@/components/ui/select"
 import { open as openDialog } from "@tauri-apps/plugin-dialog"
 import { Plus, FolderOpen } from "lucide-react"
+import { useSettingsStore } from "@/stores/settingsStore"
 
 interface SiteCreateDialogProps {
   onSubmit: (
@@ -33,25 +34,28 @@ interface SiteCreateDialogProps {
 }
 
 export function SiteCreateDialog({ onSubmit, phpVersions = [] }: SiteCreateDialogProps) {
+  const tld = useSettingsStore((s) => s.config?.tld ?? "test")
+  const defaultPhp = useSettingsStore((s) => s.config?.defaultPhpVersion)
+  const preferredPhp = defaultPhp && phpVersions.includes(defaultPhp) ? defaultPhp : (phpVersions[0] ?? "")
   const [open, setOpen] = useState(false)
   const [name, setName] = useState("")
   const [domain, setDomain] = useState("")
   const [documentRoot, setDocumentRoot] = useState("")
-  const [phpVersion, setPhpVersion] = useState(phpVersions[0] ?? "")
+  const [phpVersion, setPhpVersion] = useState(preferredPhp)
   const [ssl, setSsl] = useState(false)
   const [template, setTemplate] = useState("blank")
   const [submitting, setSubmitting] = useState(false)
 
   useEffect(() => {
     if (phpVersions.length > 0 && !phpVersions.includes(phpVersion)) {
-      setPhpVersion(phpVersions[0])
+      setPhpVersion(preferredPhp)
     }
   }, [phpVersions])
 
   const handleNameChange = (value: string) => {
     setName(value)
-    if (!domain || domain === name.toLowerCase().replace(/\s+/g, "-") + ".test") {
-      setDomain(value.toLowerCase().replace(/\s+/g, "-") + ".test")
+    if (!domain || domain === name.toLowerCase().replace(/\s+/g, "-") + "." + tld) {
+      setDomain(value.toLowerCase().replace(/\s+/g, "-") + "." + tld)
     }
   }
 
@@ -64,7 +68,7 @@ export function SiteCreateDialog({ onSubmit, phpVersions = [] }: SiteCreateDialo
       setName("")
       setDomain("")
       setDocumentRoot("")
-      setPhpVersion(phpVersions[0] ?? "")
+      setPhpVersion(preferredPhp)
       setSsl(false)
       setTemplate("blank")
     } finally {
@@ -112,7 +116,7 @@ export function SiteCreateDialog({ onSubmit, phpVersions = [] }: SiteCreateDialo
             <Label htmlFor="domain">Domain</Label>
             <Input
               id="domain"
-              placeholder="myproject.test"
+              placeholder={`myproject.${tld}`}
               value={domain}
               onChange={(e) => setDomain(e.target.value)}
             />
