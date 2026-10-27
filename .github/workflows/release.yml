@@ -103,14 +103,14 @@ jobs:
             -S apple-tool:,apple: -s \
             -k "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
 
-      - name: Build Tauri app (macOS — Signed & Notarized)
+      - name: Build Tauri app (macOS — Signed)
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          # Notarization disabled: APPLE_PASSWORD (app-specific password) was revoked.
+          # To re-enable, restore APPLE_ID and APPLE_PASSWORD env vars from secrets.
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         with:
           releaseId: ${{ needs.create-release.outputs.release_id }}
