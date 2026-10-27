@@ -1,6 +1,8 @@
 use crate::config::app_config::AppConfig;
 use crate::config::paths;
 use crate::error::AppError;
+use crate::services::php_manager::PhpManager;
+use crate::services::utils;
 
 fn get_settings_path() -> std::path::PathBuf {
     paths::get_config_dir().join("settings.toml")
@@ -31,6 +33,18 @@ pub fn settings_get() -> Result<AppConfig, AppError> {
 
 #[tauri::command]
 pub fn settings_save(config: AppConfig) -> Result<(), AppError> {
+    if config.nginx_port == 0 || config.nginx_ssl_port == 0 || config.nginx_port == config.nginx_ssl_port {
+        return Err(AppError::Config(
+            "Nginx HTTP and HTTPS ports must be non-zero and different".into(),
+        ));
+    }
+    // The TLD ends up in dnsmasq config and /etc/resolver/<tld>.
+    utils::validate_domain(&config.tld)?;
+    PhpManager::validate_version(&config.default_php_version)?;
+    if !std::path::Path::new(&config.sites_directory).is_absolute() {
+        return Err(AppError::Config("Sites directory must be an absolute path".into()));
+    }
+
     let path = get_settings_path();
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent)?;

@@ -3,6 +3,7 @@ use crate::error::AppError;
 use crate::services::dns_manager::DnsManager;
 use crate::services::nginx_config::NginxConfigGenerator;
 use crate::services::nginx_manager::NginxManager;
+use crate::services::php_manager::PhpManager;
 use crate::services::utils;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -86,7 +87,54 @@ impl SiteManager {
         toml::from_str(&content).map_err(|e| AppError::Config(e.to_string()))
     }
 
+    /// Directory nginx should serve for a site (Laravel serves `{document_root}/public`).
+    fn nginx_root(site: &Site) -> String {
+        if site.template.as_deref() == Some("laravel") {
+            std::path::Path::new(&site.document_root)
+                .join("public")
+                .to_string_lossy()
+                .to_string()
+        } else {
+            site.document_root.clone()
+        }
+    }
+
+    /// The document root is written into a quoted nginx `root "..."` directive; characters that
+    /// would break out of it make nginx reject the config for every site.
+    fn validate_document_root(path: &str) -> Result<(), AppError> {
+        if path.trim().is_empty() || !std::path::Path::new(path).is_absolute() {
+            return Err(AppError::Config(
+                "Document root must be an absolute path".into(),
+            ));
+        }
+        if path.contains(['"', ';', '{', '}', '$', '\r', '\n']) {
+            return Err(AppError::Config(
+                "Document root contains characters not allowed in nginx config".into(),
+            ));
+        }
+        Ok(())
+    }
+
+    /// Sites share nginx config, certificate and hosts entry by domain, so domains must be unique.
+    fn ensure_domain_free(domain: &str, except_id: Option<&str>) -> Result<(), AppError> {
+        let taken = Self::list()?
+            .iter()
+            .any(|s| s.domain.eq_ignore_ascii_case(domain) && Some(s.id.as_str()) != except_id);
+        if taken {
+            return Err(AppError::Config(format!(
+                "Domain '{}' is already used by another site",
+                domain
+            )));
+        }
+        Ok(())
+    }
+
     pub fn create(req: CreateSiteRequest) -> Result<Site, AppError> {
+        utils::validate_domain(&req.domain)?;
+        Self::validate_document_root(&req.document_root)?;
+        Self::ensure_domain_free(&req.domain, None)?;
+        PhpManager::validate_version(&req.php_version)?;
+
         // Ensure sites directory exists
         let sites_dir = paths::get_sites_dir();
         std::fs::create_dir_all(&sites_dir)?;
@@ -107,11 +155,6 @@ impl SiteManager {
             dns_warning: None,
         };
 
-        // Save site config
-        let toml_str = toml::to_string_pretty(&site)
-            .map_err(|e| AppError::Config(e.to_string()))?;
-        std::fs::write(Self::get_site_file(&id), &toml_str)?;
-
         // Create document root if it doesn't exist
         let doc_root = std::path::Path::new(&req.document_root);
         if !doc_root.exists() {
@@ -129,13 +172,10 @@ impl SiteManager {
         }
 
         // For Laravel, nginx root should point to {document_root}/public
-        let nginx_root = if site.template.as_deref() == Some("laravel") {
-            let public_dir = doc_root.join("public");
-            std::fs::create_dir_all(&public_dir)?;
-            public_dir.to_string_lossy().to_string()
-        } else {
-            req.document_root.clone()
-        };
+        let nginx_root = Self::nginx_root(&site);
+        if site.template.as_deref() == Some("laravel") {
+            std::fs::create_dir_all(&nginx_root)?;
+        }
 
         // Generate nginx config
         let php_port = utils::php_version_to_port(&req.php_version);
@@ -162,6 +202,12 @@ impl SiteManager {
         );
         NginxConfigGenerator::write_site_config(&req.domain, &nginx_config)?;
 
+        // Persist only after the fallible setup succeeded, so a failed create leaves no
+        // half-made site behind that would also block a retry with the same domain.
+        let toml_str = toml::to_string_pretty(&site)
+            .map_err(|e| AppError::Config(e.to_string()))?;
+        std::fs::write(Self::get_site_file(&id), &toml_str)?;
+
         // Add DNS entry for the domain (hosts file fallback when dnsmasq not configured)
         if let Err(e) = Self::ensure_dns_entry(&req.domain) {
             let warning = format!("DNS entry could not be added for '{}': {}", req.domain, e);
@@ -174,6 +220,10 @@ impl SiteManager {
     }
 
     pub fn update(id: &str, req: UpdateSiteRequest) -> Result<Site, AppError> {
+        if let Some(domain) = &req.domain {
+            utils::validate_domain(domain)?;
+            Self::ensure_domain_free(domain, Some(id))?;
+        }
         let mut site = Self::get(id)?;
         let old_domain = site.domain.clone();
 
@@ -183,11 +233,19 @@ impl SiteManager {
         if let Some(domain) = req.domain {
             site.domain = domain;
         }
-        if let Some(document_root) = req.document_root {
-            site.document_root = document_root;
-        }
         if let Some(php_version) = req.php_version {
+            // Only check on change so sites saved with an older version can still be edited
+            if php_version != site.php_version {
+                PhpManager::validate_version(&php_version)?;
+            }
             site.php_version = php_version;
+        }
+        if let Some(document_root) = req.document_root {
+            if document_root != site.document_root {
+                Self::validate_document_root(&document_root)?;
+                std::fs::create_dir_all(&document_root)?;
+            }
+            site.document_root = document_root;
         }
         if let Some(ssl) = req.ssl {
             site.ssl = ssl;
@@ -201,9 +259,15 @@ impl SiteManager {
             .map_err(|e| AppError::Config(e.to_string()))?;
         std::fs::write(Self::get_site_file(id), &toml_str)?;
 
-        // Remove old nginx config if domain changed
+        // Remove old nginx config and DNS entry if domain changed, add DNS for the new one
         if old_domain != site.domain {
             NginxConfigGenerator::remove_site_config(&old_domain)?;
+            Self::remove_dns_entry(&old_domain);
+            if let Err(e) = Self::ensure_dns_entry(&site.domain) {
+                let warning = format!("DNS entry could not be added for '{}': {}", site.domain, e);
+                log::warn!("{}", warning);
+                site.dns_warning = Some(warning);
+            }
         }
 
         // If site is inactive, remove nginx config
@@ -224,7 +288,7 @@ impl SiteManager {
             let nginx_info = NginxManager::get_info();
             let nginx_config = NginxConfigGenerator::generate_site_config(
                 &site.domain,
-                &site.document_root,
+                &Self::nginx_root(&site),
                 php_port,
                 site.ssl,
                 ssl_cert.as_deref(),
@@ -264,12 +328,7 @@ impl SiteManager {
             let php_port = utils::php_version_to_port(&site.php_version);
 
             // For Laravel, nginx root should point to {document_root}/public
-            let nginx_root = if site.template.as_deref() == Some("laravel") {
-                let public_dir = std::path::Path::new(&site.document_root).join("public");
-                public_dir.to_string_lossy().to_string()
-            } else {
-                site.document_root.clone()
-            };
+            let nginx_root = Self::nginx_root(site);
 
             let (ssl_cert, ssl_key) = if site.ssl {
                 (
@@ -352,7 +411,12 @@ impl SiteManager {
         {
             let tld = domain.rsplit('.').next().unwrap_or("");
             let status = DnsManager::get_resolver_status(tld);
-            if status.configured {
+            // Sites created via the hosts fallback before the resolver existed still have an
+            // /etc/hosts entry; only skip removal (and its password prompt) when there is none.
+            let in_hosts = DnsManager::list_entries()
+                .map(|e| e.iter().any(|x| x.domain == domain))
+                .unwrap_or(false);
+            if status.configured && !in_hosts {
                 // dnsmasq wildcard handles removal automatically — reload to confirm
                 DnsManager::reload_dnsmasq();
                 return;

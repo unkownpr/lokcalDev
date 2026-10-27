@@ -92,7 +92,7 @@ export function SettingsPage() {
 
   const handleSave = async () => {
     if (!form) return
-    await saveSettings(form)
+    if (!(await saveSettings(form))) return
     setSaved(true)
     setTimeout(() => setSaved(false), 2000)
   }
@@ -181,27 +181,8 @@ export function SettingsPage() {
               <Input
                 type="number"
                 value={form.nginxPort}
-                onChange={(e) => setForm({ ...form, nginxPort: parseInt(e.target.value) || 80 })}
+                onChange={(e) => setForm({ ...form, nginxPort: parseInt(e.target.value) || 8080 })}
               />
-            </div>
-            <div className="space-y-1.5">
-              <Label>MariaDB Port</Label>
-              <Input
-                type="number"
-                value={form.mariadbPort}
-                onChange={(e) => setForm({ ...form, mariadbPort: parseInt(e.target.value) || 3306 })}
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label>PHP-FPM Base Port</Label>
-              <Input
-                type="number"
-                value={form.phpFpmBasePort}
-                onChange={(e) => setForm({ ...form, phpFpmBasePort: parseInt(e.target.value) || 9081 })}
-              />
-              <p className="text-[11px] text-muted-foreground">
-                PHP 8.1 = {form.phpFpmBasePort}, 8.2 = {form.phpFpmBasePort + 1}, 8.3 = {form.phpFpmBasePort + 2}, 8.4 = {form.phpFpmBasePort + 3}
-              </p>
             </div>
           </Card>
         </TabsContent>

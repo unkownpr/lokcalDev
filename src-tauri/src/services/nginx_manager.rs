@@ -98,10 +98,14 @@ impl NginxManager {
 
     fn detect_version() -> Option<String> {
         let binary = Self::get_nginx_binary();
+        utils::cached_version(&binary, || Self::run_version_command(&binary))
+    }
+
+    fn run_version_command(binary: &std::path::Path) -> Option<String> {
         if !binary.exists() {
             return None;
         }
-        Command::new(&binary)
+        Command::new(binary)
             .arg("-v")
             .output()
             .ok()
@@ -127,16 +131,19 @@ impl NginxManager {
 
         Self::emit_progress(app, "extracting", "Installing Nginx via Homebrew...");
 
-        let install = Command::new("brew")
-            .args(["install", "nginx"])
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .output()
-            .map_err(|e| {
-                let msg = format!("brew install failed: {}", e);
-                Self::emit_progress(app, "failed", &msg);
-                AppError::Process(msg)
-            })?;
+        let install = utils::run_blocking(|| {
+            Command::new("brew")
+                .args(["install", "nginx"])
+                .stdout(Stdio::piped())
+                .stderr(Stdio::piped())
+                .output()
+        })
+        .await?
+        .map_err(|e| {
+            let msg = format!("brew install failed: {}", e);
+            Self::emit_progress(app, "failed", &msg);
+            AppError::Process(msg)
+        })?;
 
         // Check result by binary existence, not exit code
         // brew may return non-zero for warnings that don't prevent installation
@@ -172,7 +179,7 @@ impl NginxManager {
         let archive_path = nginx_dir.join("nginx.zip");
 
         DownloadManager::download_file(app, "nginx", &url, &archive_path).await?;
-        DownloadManager::extract_zip(app, "nginx", &archive_path, &nginx_dir)?;
+        DownloadManager::extract_zip(app, "nginx", &archive_path, &nginx_dir).await?;
 
         let _ = std::fs::remove_file(&archive_path);
 
@@ -294,6 +301,11 @@ impl NginxManager {
         let binary = Self::get_nginx_binary();
         let config = Self::get_config_path();
 
+        let pid_path = Self::get_pid_path();
+        let pid = std::fs::read_to_string(&pid_path)
+            .ok()
+            .and_then(|s| s.trim().parse::<u32>().ok());
+
         if binary.exists() && config.exists() {
             let _ = Command::new(&binary)
                 .arg("-c")
@@ -301,9 +313,14 @@ impl NginxManager {
                 .arg("-s")
                 .arg("stop")
                 .output();
+            // `-s stop` only signals the master; wait until it has released the ports
+            if let Some(pid) = pid {
+                if !utils::wait_for_exit(pid, std::time::Duration::from_secs(10)) {
+                    log::warn!("Nginx master (PID {}) still running after stop", pid);
+                }
+            }
         }
 
-        let pid_path = Self::get_pid_path();
         if pid_path.exists() {
             let _ = std::fs::remove_file(&pid_path);
         }
@@ -442,18 +459,21 @@ impl NginxManager {
         std::fs::create_dir_all(config_dir.join("sites-enabled"))?;
 
         let config_path = Self::get_config_path();
-        // Regenerate config if missing, has stale user directive,
-        // PHP port changed, or phpMyAdmin installation state changed
+        // Regenerate config if missing, has stale user directive, PHP port or
+        // listen port changed, or phpMyAdmin installation state changed
         let pma_installed = paths::get_phpmyadmin_dir().join("index.php").exists();
-        let active_php_port = Self::detect_php_fpm_port();
+        let php_port = Self::detect_php_fpm_port();
+        let (listen_port, _ssl_port) = Self::read_configured_ports();
         let needs_config = if config_path.exists() {
             let existing = std::fs::read_to_string(&config_path).unwrap_or_default();
             let has_pma = existing.contains("^~ /phpmyadmin");
-            let current_port_str = format!("fastcgi_pass 127.0.0.1:{}", active_php_port);
+            let current_port_str = format!("fastcgi_pass 127.0.0.1:{}", php_port);
+            let current_listen_str = format!("listen {} default_server", listen_port);
             !existing.contains("fastcgi_pass")
                 || existing.contains("\nuser ")
                 || pma_installed != has_pma
                 || !existing.contains(&current_port_str)
+                || !existing.contains(&current_listen_str)
         } else {
             true
         };
@@ -462,10 +482,6 @@ impl NginxManager {
             let pid_path = Self::get_pid_path();
             let www_dir = paths::get_data_dir().join("www");
             std::fs::create_dir_all(&www_dir)?;
-
-            // Detect active PHP-FPM port and configured listen port
-            let php_port = Self::detect_php_fpm_port();
-            let (listen_port, _ssl_port) = Self::read_configured_ports();
 
             let content = format!(
                 r#"worker_processes auto;

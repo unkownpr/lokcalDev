@@ -89,8 +89,15 @@ impl DownloadManager {
 
         let total = response.content_length();
         let mut downloaded: u64 = 0;
+        // Stream into a sibling temp file and rename on success, so an interrupted
+        // download never leaves a truncated file at `dest` (e.g. the mkcert binary).
+        let file_name = dest
+            .file_name()
+            .map(|n| n.to_string_lossy().into_owned())
+            .unwrap_or_else(|| "download".to_string());
+        let tmp = dest.with_file_name(format!("{}.part", file_name));
         let mut file =
-            std::fs::File::create(dest).map_err(|e| {
+            std::fs::File::create(&tmp).map_err(|e| {
                 let msg = format!("Failed to create file: {}", e);
                 Self::emit_progress(app, id, 0, None, 0.0, "failed", Some(msg.clone()));
                 AppError::Download(msg)
@@ -100,23 +107,39 @@ impl DownloadManager {
 
         let mut stream = response.bytes_stream();
         let mut last_emit = std::time::Instant::now();
+        let tmp_path = tmp.as_path();
 
-        while let Some(chunk) = stream.next().await {
-            let chunk = chunk.map_err(|e| {
-                let msg = format!("Stream error: {}", e);
-                Self::emit_progress(app, id, downloaded, total, 0.0, "failed", Some(msg.clone()));
-                AppError::Download(msg)
-            })?;
-            file.write_all(&chunk)?;
-            downloaded += chunk.len() as u64;
+        // `async move` takes ownership of `file`, so it is closed before the rename
+        // and before the cleanup below (required on Windows).
+        let result: Result<u64, AppError> = async move {
+            while let Some(chunk) = stream.next().await {
+                let chunk = chunk.map_err(|e| AppError::Download(format!("Stream error: {}", e)))?;
+                file.write_all(&chunk)?;
+                downloaded += chunk.len() as u64;
 
-            // Throttle events to every 100ms to avoid flooding
-            if last_emit.elapsed().as_millis() >= 100 || downloaded == total.unwrap_or(0) {
-                let percent = total.map(|t| (downloaded as f64 / t as f64) * 100.0).unwrap_or(0.0);
-                Self::emit_progress(app, id, downloaded, total, percent, "downloading", None);
-                last_emit = std::time::Instant::now();
+                // Throttle events to every 100ms to avoid flooding
+                if last_emit.elapsed().as_millis() >= 100 || downloaded == total.unwrap_or(0) {
+                    let percent = total.map(|t| (downloaded as f64 / t as f64) * 100.0).unwrap_or(0.0);
+                    Self::emit_progress(app, id, downloaded, total, percent, "downloading", None);
+                    last_emit = std::time::Instant::now();
+                }
             }
+            file.flush()?;
+            drop(file);
+            std::fs::rename(tmp_path, dest)?;
+            Ok(downloaded)
         }
+        .await;
+
+        let downloaded = match result {
+            Ok(n) => n,
+            Err(e) => {
+                let _ = std::fs::remove_file(&tmp);
+                log::error!("Download of {} failed: {}", url, e);
+                Self::emit_progress(app, id, 0, total, 0.0, "failed", Some(e.to_string()));
+                return Err(e);
+            }
+        };
 
         Self::emit_progress(app, id, downloaded, total, 100.0, "completed", Some("Download complete".to_string()));
 
@@ -146,8 +169,19 @@ impl DownloadManager {
         Ok(())
     }
 
+    /// Extract on the blocking thread pool; archives are 50-100 MB.
     #[allow(dead_code)]
-    pub fn extract_zip(app: &AppHandle, id: &str, archive_path: &Path, dest_dir: &Path) -> Result<(), AppError> {
+    pub async fn extract_zip(app: &AppHandle, id: &str, archive_path: &Path, dest_dir: &Path) -> Result<(), AppError> {
+        let (app, id) = (app.clone(), id.to_string());
+        let (archive_path, dest_dir) = (archive_path.to_path_buf(), dest_dir.to_path_buf());
+        crate::services::utils::run_blocking(move || {
+            Self::extract_zip_blocking(&app, &id, &archive_path, &dest_dir)
+        })
+        .await?
+    }
+
+    #[allow(dead_code)]
+    fn extract_zip_blocking(app: &AppHandle, id: &str, archive_path: &Path, dest_dir: &Path) -> Result<(), AppError> {
         log::info!(
             "Extracting ZIP {} to {}",
             archive_path.display(),

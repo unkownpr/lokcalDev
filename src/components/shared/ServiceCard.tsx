@@ -8,6 +8,7 @@ import type { ServiceInfo } from "@/types/service"
 
 interface ServiceCardProps {
   service: ServiceInfo
+  nginxPort: number
   onInstall: (id: string) => void
   onInitialize: (id: string) => void
   onStart: (id: string) => void
@@ -15,7 +16,7 @@ interface ServiceCardProps {
   onRestart: (id: string) => void
 }
 
-export function ServiceCard({ service, onInstall, onInitialize, onStart, onStop, onRestart }: ServiceCardProps) {
+export function ServiceCard({ service, nginxPort, onInstall, onInitialize, onStart, onStop, onRestart }: ServiceCardProps) {
   const isRunning = service.status === "running"
   const isWebOnly = service.id === "phpmyadmin"
 
@@ -57,7 +58,7 @@ export function ServiceCard({ service, onInstall, onInitialize, onStart, onStop,
           <Button
             variant="ghost"
             size="sm"
-            onClick={() => open("http://localhost/phpmyadmin")}
+            onClick={() => open(`http://localhost:${nginxPort}/phpmyadmin`)}
           >
             <ExternalLink className="mr-1.5 h-3.5 w-3.5" />
             Open

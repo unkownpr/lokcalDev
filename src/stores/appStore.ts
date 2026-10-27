@@ -2,6 +2,7 @@ import { create } from "zustand"
 import { toast } from "sonner"
 import type { SystemInfo } from "@/types/config"
 import * as tauri from "@/lib/tauri"
+import { useSettingsStore } from "@/stores/settingsStore"
 
 interface AppStore {
   initialized: boolean
@@ -18,6 +19,26 @@ interface AppStore {
   installUpdate: () => Promise<void>
 }
 
+/** Start MariaDB and Nginx if installed and stopped; Nginx starts the PHP-FPM versions its sites need. */
+async function autoStartServices() {
+  try {
+    const services = await tauri.getAllServices()
+    for (const id of ["mariadb", "nginx"]) {
+      const svc = services.find((s) => s.id === id)
+      if (!svc || !svc.installed || svc.status === "running") continue
+      if (id === "mariadb" && !svc.initialized) continue
+      await tauri.startService(id).catch((err) => {
+        toast.error(`Auto-start failed for ${svc.name}`, { description: String(err) })
+      })
+    }
+  } catch (err) {
+    console.warn("Auto-start services failed:", err)
+  }
+}
+
+// initialize() has side effects (auto-start, dnsmasq); StrictMode/remounts must not run it twice.
+let initStarted = false
+
 export const useAppStore = create<AppStore>((set) => ({
   initialized: false,
   systemInfo: null,
@@ -30,13 +51,22 @@ export const useAppStore = create<AppStore>((set) => ({
   updateProgress: null,
 
   initialize: async () => {
+    if (initStarted) return
+    initStarted = true
     try {
       await tauri.initializeApp()
       const systemInfo = await tauri.getSystemInfo()
       set({ initialized: true, systemInfo })
 
-      // Ensure dnsmasq is running for .test domain resolution (no password needed)
-      tauri.dnsEnsureDnsmasqRunning("test").catch(() => {})
+      await useSettingsStore.getState().fetchSettings()
+      const settings = useSettingsStore.getState().config
+
+      // Ensure dnsmasq is running for local domain resolution (no password needed)
+      tauri.dnsEnsureDnsmasqRunning(settings?.tld ?? "test").catch(() => {})
+
+      if (settings?.autoStartServices) {
+        autoStartServices()
+      }
 
       // Check for updates in background (non-blocking)
       // Pre-check endpoint to avoid Rust-side ERROR logs when no release exists
@@ -56,6 +86,7 @@ export const useAppStore = create<AppStore>((set) => ({
         })
         .catch(() => {})
     } catch (err) {
+      initStarted = false
       set({ error: String(err) })
     }
   },

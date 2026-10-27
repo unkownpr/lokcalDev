@@ -8,8 +8,13 @@ use crate::services::utils;
 use crate::state::{AppState, ServiceInfo, ServiceStatus};
 use tauri::State;
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn get_all_services(state: State<'_, AppState>) -> Result<Vec<ServiceInfo>, AppError> {
+    // Reap tracked children that exited on their own so they stop showing as running.
+    if let Ok(mut children) = state.child_processes.lock() {
+        children.retain(|_, c| !matches!(c.try_wait(), Ok(Some(_))));
+    }
+
     // Refresh real installation/running status from managers
     let nginx_info = NginxManager::get_info();
     let mariadb_info = MariaDbManager::get_info();
@@ -26,6 +31,7 @@ pub fn get_all_services(state: State<'_, AppState>) -> Result<Vec<ServiceInfo>, 
         svc.installed = nginx_info.installed;
         svc.initialized = true;
         svc.version = nginx_info.version;
+        svc.port = Some(nginx_info.port);
         if nginx_info.running {
             svc.status = ServiceStatus::Running;
             svc.pid = nginx_info.pid;
@@ -119,7 +125,7 @@ pub fn get_service(
         .ok_or_else(|| AppError::Service(format!("Service '{}' not found", service_id)))
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn start_service(
     state: State<'_, AppState>,
     service_id: String,
@@ -233,7 +239,7 @@ pub fn start_service(
     }
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn stop_service(
     state: State<'_, AppState>,
     service_id: String,
@@ -263,11 +269,17 @@ pub fn stop_service(
             Ok(info)
         }
         "mariadb" => {
-            // Remove child process handle (don't SIGKILL - let stop() SIGTERM gracefully)
-            if let Ok(mut procs) = state.child_processes.lock() {
-                procs.remove("mariadb");
-            }
+            // Take the child handle (don't SIGKILL - let the manager SIGTERM gracefully and wait),
+            // then reap it so it doesn't linger as a zombie
+            let child = state
+                .child_processes
+                .lock()
+                .ok()
+                .and_then(|mut procs| procs.remove("mariadb"));
             MariaDbManager::stop()?;
+            if let Some(mut child) = child {
+                let _ = child.try_wait();
+            }
 
             let db_info = MariaDbManager::get_info();
             let info = ServiceInfo {
@@ -292,11 +304,17 @@ pub fn stop_service(
         id if id.starts_with("php-fpm-") => {
             let version = id.strip_prefix("php-fpm-").unwrap();
 
-            // Remove child process handle (don't SIGKILL - let stop_fpm() SIGTERM gracefully)
-            if let Ok(mut procs) = state.child_processes.lock() {
-                procs.remove(&service_id);
-            }
+            // Take the child handle (don't SIGKILL - let the manager SIGTERM gracefully and wait),
+            // then reap it so it doesn't linger as a zombie
+            let child = state
+                .child_processes
+                .lock()
+                .ok()
+                .and_then(|mut procs| procs.remove(&service_id));
             PhpManager::stop_fpm(version)?;
+            if let Some(mut child) = child {
+                let _ = child.try_wait();
+            }
 
             let info = ServiceInfo {
                 id: service_id.clone(),
@@ -340,7 +358,7 @@ pub fn stop_service(
     }
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn restart_service(
     state: State<'_, AppState>,
     service_id: String,

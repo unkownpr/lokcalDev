@@ -2,6 +2,7 @@ import { create } from "zustand"
 import { toast } from "sonner"
 import type { CertificateInfo, DnsEntry, ResolverStatus } from "@/types/ssl"
 import * as tauri from "@/lib/tauri"
+import { getTld } from "@/stores/settingsStore"
 
 interface SslStore {
   mkcertInstalled: boolean
@@ -85,6 +86,7 @@ export const useSslStore = create<SslStore>((set, get) => ({
       await get().fetchCertificates()
     } catch (err) {
       set({ error: String(err) })
+      toast.error("Failed to remove certificate", { description: String(err) })
     }
   },
 
@@ -126,7 +128,7 @@ export const useSslStore = create<SslStore>((set, get) => ({
 
   fetchResolverStatus: async () => {
     try {
-      const resolverStatus = await tauri.dnsGetResolverStatus("test")
+      const resolverStatus = await tauri.dnsGetResolverStatus(await getTld())
       set({ resolverStatus })
     } catch (err) {
       set({ error: String(err) })

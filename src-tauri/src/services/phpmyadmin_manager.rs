@@ -1,7 +1,6 @@
 use crate::config::paths;
 use crate::error::AppError;
 use crate::services::download_manager::DownloadManager;
-use crate::services::nginx_config::NginxConfigGenerator;
 use crate::services::nginx_manager::NginxManager;
 use crate::services::site_manager::SiteManager;
 use crate::services::utils;
@@ -81,7 +80,7 @@ impl PhpMyAdminManager {
         DownloadManager::download_file(app, "phpmyadmin", &url, &archive_path).await?;
 
         Self::emit_progress(app, "extracting", "Extracting phpMyAdmin...");
-        DownloadManager::extract_zip(app, "phpmyadmin", &archive_path, &pma_dir)?;
+        DownloadManager::extract_zip(app, "phpmyadmin", &archive_path, &pma_dir).await?;
 
         let _ = std::fs::remove_file(&archive_path);
 
@@ -92,7 +91,7 @@ impl PhpMyAdminManager {
         Self::create_config()?;
 
         // Regenerate nginx config to add /phpmyadmin location and reload
-        Self::refresh_nginx()?;
+        utils::run_blocking(Self::refresh_nginx).await??;
 
         Self::emit_progress(app, "completed", "phpMyAdmin installed");
         log::info!("phpMyAdmin installed to {}", pma_dir.display());
@@ -102,35 +101,8 @@ impl PhpMyAdminManager {
 
     fn refresh_nginx() -> Result<(), AppError> {
         // Regenerate all site configs to include /phpmyadmin location
-        if let Ok(sites) = SiteManager::list() {
-            let ssl_dir = paths::get_ssl_dir();
-            for site in &sites {
-                if !site.active {
-                    continue;
-                }
-                let php_port = utils::php_version_to_port(&site.php_version);
-                let (ssl_cert, ssl_key) = if site.ssl {
-                    (
-                        Some(ssl_dir.join(format!("{}.pem", site.domain)).to_string_lossy().to_string()),
-                        Some(ssl_dir.join(format!("{}-key.pem", site.domain)).to_string_lossy().to_string()),
-                    )
-                } else {
-                    (None, None)
-                };
-                let nginx_info = NginxManager::get_info();
-                let config = NginxConfigGenerator::generate_site_config(
-                    &site.domain,
-                    &site.document_root,
-                    php_port,
-                    site.ssl,
-                    ssl_cert.as_deref(),
-                    ssl_key.as_deref(),
-                    nginx_info.port,
-                    nginx_info.ssl_port,
-                );
-                let _ = NginxConfigGenerator::write_site_config(&site.domain, &config);
-            }
-            log::info!("Regenerated {} site configs with phpMyAdmin location", sites.len());
+        if let Err(e) = SiteManager::regenerate_all_configs() {
+            log::warn!("Failed to regenerate site configs: {}", e);
         }
 
         // Restart nginx so ensure_config picks up phpMyAdmin in default server
@@ -150,17 +122,8 @@ impl PhpMyAdminManager {
         let socket_path = paths::get_data_dir().join("data").join("mariadb.sock");
         let socket_str = socket_path.to_string_lossy().replace('\\', "/");
 
-        let blowfish_secret: String = (0..32)
-            .map(|_| {
-                let idx = (std::time::SystemTime::now()
-                    .duration_since(std::time::UNIX_EPOCH)
-                    .unwrap_or_default()
-                    .subsec_nanos()
-                    % 62) as usize;
-                let chars = b"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
-                chars[idx % chars.len()] as char
-            })
-            .collect();
+        // 32 hex chars from the OS CSPRNG (phpMyAdmin requires a 32-byte secret)
+        let blowfish_secret = uuid::Uuid::new_v4().simple().to_string();
 
         let config_content = format!(
             r#"<?php

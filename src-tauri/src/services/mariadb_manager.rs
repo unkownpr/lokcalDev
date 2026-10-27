@@ -151,10 +151,14 @@ impl MariaDbManager {
 
     fn detect_version() -> Option<String> {
         let mysqld = Self::get_mysqld_binary();
+        utils::cached_version(&mysqld, || Self::run_version_command(&mysqld))
+    }
+
+    fn run_version_command(mysqld: &std::path::Path) -> Option<String> {
         if !mysqld.exists() {
             return None;
         }
-        Command::new(&mysqld)
+        Command::new(mysqld)
             .arg("--version")
             .output()
             .ok()
@@ -182,16 +186,19 @@ impl MariaDbManager {
 
         Self::emit_progress(app, "extracting", "Installing MariaDB via Homebrew...");
 
-        let install = Command::new("brew")
-            .args(["install", "mariadb"])
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .output()
-            .map_err(|e| {
-                let msg = format!("brew install failed: {}", e);
-                Self::emit_progress(app, "failed", &msg);
-                AppError::Process(msg)
-            })?;
+        let install = utils::run_blocking(|| {
+            Command::new("brew")
+                .args(["install", "mariadb"])
+                .stdout(Stdio::piped())
+                .stderr(Stdio::piped())
+                .output()
+        })
+        .await?
+        .map_err(|e| {
+            let msg = format!("brew install failed: {}", e);
+            Self::emit_progress(app, "failed", &msg);
+            AppError::Process(msg)
+        })?;
 
         // Check result by binary existence, not exit code
         // brew may return non-zero for warnings that don't prevent installation
@@ -227,7 +234,7 @@ impl MariaDbManager {
         let archive_path = base_dir.join("mariadb.zip");
 
         DownloadManager::download_file(app, "mariadb", &url, &archive_path).await?;
-        DownloadManager::extract_zip(app, "mariadb", &archive_path, &base_dir)?;
+        DownloadManager::extract_zip(app, "mariadb", &archive_path, &base_dir).await?;
 
         let _ = std::fs::remove_file(&archive_path);
 
@@ -336,6 +343,19 @@ impl MariaDbManager {
         let pid_path = Self::get_pid_path();
         let log_path = Self::get_log_path();
 
+        if let (true, pid) = utils::read_pid_file(&pid_path) {
+            return Err(AppError::Service(format!(
+                "MariaDB is already running (PID {})",
+                pid.unwrap_or(0)
+            )));
+        }
+
+        if !data_dir.join("mysql").exists() {
+            return Err(AppError::Service(
+                "MariaDB data directory is not initialized; initialize it first".to_string(),
+            ));
+        }
+
         let mut cmd = Command::new(&mysqld);
         cmd.arg("--no-defaults")
             .arg(format!("--basedir={}", utils::to_forward_slash(&base_dir)))
@@ -359,11 +379,21 @@ impl MariaDbManager {
             cmd.arg("--skip-named-pipe");
         }
 
-        let child = cmd.spawn()
+        let mut child = cmd.spawn()
             .map_err(|e| AppError::Process(format!("Failed to start MariaDB: {}", e)))?;
 
         let pid = child.id();
         let _ = std::fs::write(&pid_path, pid.to_string());
+
+        if let Err(e) = utils::ensure_still_running(
+            &mut child,
+            "MariaDB",
+            Some(&log_path),
+            std::time::Duration::from_millis(1500),
+        ) {
+            let _ = std::fs::remove_file(&pid_path);
+            return Err(e);
+        }
 
         log::info!("Started MariaDB (PID: {})", pid);
         Ok(child)
@@ -376,7 +406,8 @@ impl MariaDbManager {
         if pid_path.exists() {
             if let Ok(pid_str) = std::fs::read_to_string(&pid_path) {
                 if let Ok(pid) = pid_str.trim().parse::<u32>() {
-                    utils::kill_process(pid);
+                    // InnoDB shutdown can take a while; wait so a restart doesn't hit the port/datadir lock
+                    utils::stop_process(pid, std::time::Duration::from_secs(30));
                 }
             }
             let _ = std::fs::remove_file(&pid_path);

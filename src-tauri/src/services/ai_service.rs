@@ -1,3 +1,4 @@
+use crate::commands::service_commands;
 use crate::config::app_config::AppConfig;
 use crate::config::paths;
 use crate::error::AppError;
@@ -8,7 +9,8 @@ use crate::services::site_manager::{CreateSiteRequest, SiteManager};
 use futures_util::StreamExt;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
-use tauri::{AppHandle, Emitter};
+use crate::state::AppState;
+use tauri::{AppHandle, Emitter, State};
 
 // ── Types ─────────────────────────────────────────────────────────
 
@@ -53,6 +55,31 @@ pub struct AiStreamChunk {
     pub tool_calls: Option<Vec<AiToolCall>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub error: Option<String>,
+}
+
+/// phpMyAdmin has no process of its own; service_commands only reports its status.
+fn reject_phpmyadmin(service_id: &str) -> Result<(), AppError> {
+    if service_id == "phpmyadmin" {
+        return Err(AppError::Service(
+            "phpMyAdmin has no process; start or stop MariaDB instead".into(),
+        ));
+    }
+    Ok(())
+}
+
+/// Reload a running nginx after a site config change (the UI does the same via nginxReload).
+/// Returns a note for the model when the reload failed so it does not claim the site is live.
+fn reload_nginx_note() -> String {
+    if !NginxManager::get_info().running {
+        return String::new();
+    }
+    match NginxManager::reload() {
+        Ok(()) => String::new(),
+        Err(e) => {
+            log::warn!("Nginx reload after AI site change failed: {}", e);
+            format!("\nWarning: nginx reload failed, changes are not live yet: {}", e)
+        }
+    }
 }
 
 // ── Tool Definitions ──────────────────────────────────────────────
@@ -107,14 +134,13 @@ fn get_tool_definitions() -> Vec<Value> {
             "type": "function",
             "function": {
                 "name": "create_site",
-                "description": "Create a new local development site",
+                "description": "Create a new blank PHP site (templates like Laravel/WordPress must be installed from the Sites page)",
                 "parameters": {
                     "type": "object",
                     "properties": {
                         "name": { "type": "string", "description": "Site name (e.g. 'My App')" },
                         "domain": { "type": "string", "description": "Domain (e.g. 'myapp.test')" },
-                        "php_version": { "type": "string", "description": "PHP version (e.g. '8.3')", "default": "8.3" },
-                        "template": { "type": "string", "description": "Site template: 'default', 'laravel', 'wordpress'", "default": "default" }
+                        "php_version": { "type": "string", "description": "PHP version (e.g. '8.3')", "default": "8.3" }
                     },
                     "required": ["name", "domain"]
                 }
@@ -328,6 +354,19 @@ pub async fn chat_stream(app: &AppHandle, messages: Vec<AiMessage>) -> Result<()
             }
 
             if let Ok(parsed) = serde_json::from_str::<Value>(data) {
+                // OpenRouter reports mid-stream failures as an `error` object instead of a delta.
+                if let Some(msg) = parsed["error"]["message"]
+                    .as_str()
+                    .or_else(|| parsed["choices"][0]["error"]["message"].as_str())
+                {
+                    let _ = app.emit("ai-stream", AiStreamChunk {
+                        chunk_type: "error".to_string(),
+                        content: None,
+                        tool_calls: None,
+                        error: Some(format!("OpenRouter error: {}", msg)),
+                    });
+                    return Ok(());
+                }
                 let delta = &parsed["choices"][0]["delta"];
 
                 // Handle content delta
@@ -395,7 +434,11 @@ pub async fn chat_stream(app: &AppHandle, messages: Vec<AiMessage>) -> Result<()
 
 // ── Tool Execution ────────────────────────────────────────────────
 
-pub fn execute_tool(tool_name: &str, arguments: &str) -> Result<String, AppError> {
+pub fn execute_tool(
+    state: State<'_, AppState>,
+    tool_name: &str,
+    arguments: &str,
+) -> Result<String, AppError> {
     let args: Value = serde_json::from_str(arguments).unwrap_or(json!({}));
 
     match tool_name {
@@ -436,45 +479,23 @@ pub fn execute_tool(tool_name: &str, arguments: &str) -> Result<String, AppError
             Ok(serde_json::to_string_pretty(&services).unwrap_or_default())
         }
 
+        // Go through the same commands as the UI so child processes are tracked,
+        // reaped and shut down with the app, and service state stays in sync.
         "start_service" => {
             let service_id = args["service_id"].as_str().unwrap_or("");
-            match service_id {
-                "nginx" => {
-                    NginxManager::start()?;
-                    Ok(format!("Nginx started successfully on port {}", NginxManager::get_info().port))
-                }
-                "mariadb" => {
-                    let _child = MariaDbManager::start()?;
-                    // Note: child process is not tracked here, service_commands handles that
-                    Ok("MariaDB started successfully".to_string())
-                }
-                id if id.starts_with("php-fpm-") => {
-                    let version = id.strip_prefix("php-fpm-").unwrap();
-                    let (_child, _pid) = PhpManager::start_fpm(version)?;
-                    Ok(format!("PHP-FPM {} started successfully", version))
-                }
-                _ => Err(AppError::Service(format!("Unknown service: {}", service_id))),
-            }
+            reject_phpmyadmin(service_id)?;
+            let info = service_commands::start_service(state, service_id.to_string())?;
+            Ok(match info.port {
+                Some(port) => format!("{} started successfully on port {}", info.name, port),
+                None => format!("{} started successfully", info.name),
+            })
         }
 
         "stop_service" => {
             let service_id = args["service_id"].as_str().unwrap_or("");
-            match service_id {
-                "nginx" => {
-                    NginxManager::stop()?;
-                    Ok("Nginx stopped successfully".to_string())
-                }
-                "mariadb" => {
-                    MariaDbManager::stop()?;
-                    Ok("MariaDB stopped successfully".to_string())
-                }
-                id if id.starts_with("php-fpm-") => {
-                    let version = id.strip_prefix("php-fpm-").unwrap();
-                    PhpManager::stop_fpm(version)?;
-                    Ok(format!("PHP-FPM {} stopped successfully", version))
-                }
-                _ => Err(AppError::Service(format!("Unknown service: {}", service_id))),
-            }
+            reject_phpmyadmin(service_id)?;
+            let info = service_commands::stop_service(state, service_id.to_string())?;
+            Ok(format!("{} stopped successfully", info.name))
         }
 
         "list_sites" => {
@@ -500,7 +521,13 @@ pub fn execute_tool(tool_name: &str, arguments: &str) -> Result<String, AppError
             let name = args["name"].as_str().unwrap_or("New Site");
             let domain = args["domain"].as_str().unwrap_or("site.test");
             let php_version = args["php_version"].as_str().unwrap_or("8.3");
-            let _template = args["template"].as_str().unwrap_or("default");
+            // Templates need the async TemplateManager + AppHandle, which tools don't have.
+            let template_note = match args["template"].as_str() {
+                Some(t) if !t.is_empty() && t != "default" && t != "blank" => {
+                    "\nNote: templates are not supported here; a blank site was created."
+                }
+                _ => "",
+            };
 
             let config = read_config();
             let document_root = std::path::Path::new(&config.sites_directory)
@@ -519,8 +546,13 @@ pub fn execute_tool(tool_name: &str, arguments: &str) -> Result<String, AppError
 
             let site = SiteManager::create(req)?;
             Ok(format!(
-                "Site '{}' created successfully at {}\nDomain: {}\nPHP: {}",
-                site.name, site.document_root, site.domain, site.php_version
+                "Site '{}' created successfully at {}\nDomain: {}\nPHP: {}{}{}",
+                site.name,
+                site.document_root,
+                site.domain,
+                site.php_version,
+                template_note,
+                reload_nginx_note()
             ))
         }
 
@@ -533,7 +565,12 @@ pub fn execute_tool(tool_name: &str, arguments: &str) -> Result<String, AppError
                 .ok_or_else(|| AppError::NotFound(format!("Site with domain '{}' not found", domain)))?;
 
             SiteManager::delete(&site.id)?;
-            Ok(format!("Site '{}' ({}) deleted successfully", site.name, domain))
+            Ok(format!(
+                "Site '{}' ({}) deleted successfully{}",
+                site.name,
+                domain,
+                reload_nginx_note()
+            ))
         }
 
         "write_file" => {
@@ -547,9 +584,47 @@ pub fn execute_tool(tool_name: &str, arguments: &str) -> Result<String, AppError
                 .find(|s| s.domain == domain)
                 .ok_or_else(|| AppError::NotFound(format!("Site with domain '{}' not found", domain)))?;
 
-            let file_path = std::path::Path::new(&site.document_root).join(filename);
+            // The filename comes from the model: keep it strictly inside the document root.
+            let rel = std::path::Path::new(filename);
+            if filename.is_empty()
+                || rel.is_absolute()
+                || rel
+                    .components()
+                    .any(|c| !matches!(c, std::path::Component::Normal(_)))
+            {
+                return Err(AppError::Config(
+                    "filename must be a relative path inside the site".into(),
+                ));
+            }
 
-            // Ensure parent directories exist
+            let doc_root = std::path::Path::new(&site.document_root);
+            let file_path = doc_root.join(rel);
+
+            // Containment check before touching the filesystem. symlink_metadata is used so a
+            // dangling symlink counts as existing (Path::exists follows links and says false).
+            let canon_root = doc_root.canonicalize()?;
+            let is_symlink = file_path
+                .symlink_metadata()
+                .map(|m| m.file_type().is_symlink())
+                .unwrap_or(false);
+            if is_symlink {
+                return Err(AppError::Config("filename must not be a symlink".into()));
+            }
+            // The deepest existing ancestor must resolve inside the root; canonicalize fails on
+            // a dangling intermediate symlink, which rejects that case too.
+            let mut existing = file_path.as_path();
+            while existing.symlink_metadata().is_err() {
+                match existing.parent() {
+                    Some(p) => existing = p,
+                    None => break,
+                }
+            }
+            if !existing.canonicalize()?.starts_with(&canon_root) {
+                return Err(AppError::Config(
+                    "filename resolves outside the site directory".into(),
+                ));
+            }
+
             if let Some(parent) = file_path.parent() {
                 std::fs::create_dir_all(parent)?;
             }

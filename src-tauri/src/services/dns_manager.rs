@@ -106,12 +106,14 @@ impl DnsManager {
 
         #[cfg(target_os = "macos")]
         {
-            let temp_path = "/tmp/lokcaldev_hosts_tmp";
-            std::fs::write(temp_path, content)?;
+            // Per-user temp dir: a fixed /tmp path could be pre-created as a symlink
+            // by another local user and then copied over /etc/hosts as root.
+            let temp_path = std::env::temp_dir().join("lokcaldev_hosts_tmp");
+            std::fs::write(&temp_path, content)?;
 
             let script = format!(
-                "do shell script \"cp {} {}\" with administrator privileges",
-                temp_path,
+                "do shell script \"cp '{}' '{}'\" with administrator privileges",
+                temp_path.display(),
                 hosts_path.display()
             );
 
@@ -120,7 +122,7 @@ impl DnsManager {
                 .output()
                 .map_err(|e| AppError::Process(format!("Failed to run osascript: {}", e)))?;
 
-            let _ = std::fs::remove_file(temp_path);
+            let _ = std::fs::remove_file(&temp_path);
 
             if !output.status.success() {
                 let stderr = String::from_utf8_lossy(&output.stderr);
@@ -211,6 +213,10 @@ impl DnsManager {
     }
 
     pub fn add_entry(domain: &str, ip: &str) -> Result<(), AppError> {
+        utils::validate_domain(domain)?;
+        if ip.parse::<std::net::IpAddr>().is_err() {
+            return Err(AppError::Config(format!("Invalid IP address: '{}'", ip)));
+        }
         let content = Self::read_hosts()?;
         let mut entries = Self::get_lokcal_entries(&content);
         entries.retain(|e| e.domain != domain);
@@ -314,6 +320,7 @@ impl DnsManager {
     /// Start dnsmasq as user service (NO password needed).
     /// Call this on every app startup to ensure dnsmasq is running.
     pub fn ensure_dnsmasq_running(tld: &str) -> Result<(), AppError> {
+        utils::validate_domain(tld)?;
         #[cfg(target_os = "macos")]
         {
             if !Self::is_dnsmasq_installed() {
@@ -344,8 +351,9 @@ impl DnsManager {
 
             let needs_address = !has_address;
             let needs_port = !has_port;
+            let changed = needs_address || needs_port;
 
-            if needs_address || needs_port {
+            if changed {
                 let mut new_content = content.clone();
                 if !new_content.is_empty() && !new_content.ends_with('\n') {
                     new_content.push('\n');
@@ -363,9 +371,10 @@ impl DnsManager {
                 log::info!("Updated dnsmasq config (port 5353, .{})", tld);
             }
 
-            // Start dnsmasq as user service (NO sudo needed on port 5353)
-            if !Self::is_dnsmasq_running() {
-                // Stop any old system-level service first (ignore errors)
+            // Start dnsmasq as user service (NO sudo needed on port 5353). A running dnsmasq
+            // must be restarted after a config change: SIGHUP does not re-read port=/address=.
+            if changed || !Self::is_dnsmasq_running() {
+                // Stop any old/running service first (ignore errors)
                 let _ = std::process::Command::new("brew")
                     .args(["services", "stop", "dnsmasq"])
                     .output();
@@ -382,7 +391,7 @@ impl DnsManager {
 
                 // Wait a moment for dnsmasq to bind
                 std::thread::sleep(std::time::Duration::from_millis(500));
-                log::info!("Started dnsmasq on port 5353");
+                log::info!("(Re)started dnsmasq on port 5353");
             }
 
             Ok(())
@@ -398,6 +407,7 @@ impl DnsManager {
     /// The resolver file (/etc/resolver/{tld}) needs ONE password prompt.
     /// After that, dnsmasq runs on port 5353 (no root) and auto-starts.
     pub fn setup_resolver(tld: &str) -> Result<(), AppError> {
+        utils::validate_domain(tld)?;
         #[cfg(target_os = "macos")]
         {
             utils::ensure_homebrew()?;

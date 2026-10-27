@@ -8,8 +8,10 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { PageHeader } from "@/components/shared/PageHeader"
 import { useSslStore } from "@/stores/sslStore"
 import { useSiteStore } from "@/stores/siteStore"
+import { useSettingsStore } from "@/stores/settingsStore"
 
 export function SslPage() {
+  const tld = useSettingsStore((s) => s.config?.tld ?? "test")
   const {
     mkcertInstalled,
     caInstalled,
@@ -109,7 +111,7 @@ export function SslPage() {
 
                 <Button
                   size="sm"
-                  onClick={() => setupResolver("test")}
+                  onClick={() => setupResolver(tld)}
                   disabled={resolverLoading}
                 >
                   {resolverLoading ? (

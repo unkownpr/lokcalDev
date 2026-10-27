@@ -11,7 +11,7 @@ pub async fn nginx_install(app: AppHandle) -> Result<NginxInfo, AppError> {
     NginxManager::install(&app).await
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn nginx_get_info() -> Result<NginxInfo, AppError> {
     Ok(NginxManager::get_info())
 }
@@ -100,7 +100,7 @@ pub(crate) fn auto_start_required_fpm(state: &State<'_, AppState>) {
     }
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn nginx_start(state: State<'_, AppState>) -> Result<ServiceInfo, AppError> {
     // Auto-start PHP-FPM for active sites before starting nginx
     auto_start_required_fpm(&state);
@@ -128,7 +128,7 @@ pub fn nginx_start(state: State<'_, AppState>) -> Result<ServiceInfo, AppError> 
     Ok(info)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn nginx_stop(state: State<'_, AppState>) -> Result<ServiceInfo, AppError> {
     NginxManager::stop()?;
     let nginx_info = NginxManager::get_info();
@@ -153,7 +153,7 @@ pub fn nginx_stop(state: State<'_, AppState>) -> Result<ServiceInfo, AppError> {
     Ok(info)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn nginx_restart(state: State<'_, AppState>) -> Result<ServiceInfo, AppError> {
     NginxManager::stop()?;
 
@@ -183,12 +183,12 @@ pub fn nginx_restart(state: State<'_, AppState>) -> Result<ServiceInfo, AppError
     Ok(info)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn nginx_reload() -> Result<(), AppError> {
     NginxManager::reload()
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn nginx_test_config() -> Result<String, AppError> {
     NginxManager::test_config()
 }
