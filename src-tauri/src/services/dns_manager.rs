@@ -106,12 +106,14 @@ impl DnsManager {
 
         #[cfg(target_os = "macos")]
         {
-            let temp_path = "/tmp/lokcaldev_hosts_tmp";
-            std::fs::write(temp_path, content)?;
+            // Per-user temp dir: a fixed /tmp path could be pre-created as a symlink
+            // by another local user and then copied over /etc/hosts as root.
+            let temp_path = std::env::temp_dir().join("lokcaldev_hosts_tmp");
+            std::fs::write(&temp_path, content)?;
 
             let script = format!(
-                "do shell script \"cp {} {}\" with administrator privileges",
-                temp_path,
+                "do shell script \"cp '{}' '{}'\" with administrator privileges",
+                temp_path.display(),
                 hosts_path.display()
             );
 
@@ -120,7 +122,7 @@ impl DnsManager {
                 .output()
                 .map_err(|e| AppError::Process(format!("Failed to run osascript: {}", e)))?;
 
-            let _ = std::fs::remove_file(temp_path);
+            let _ = std::fs::remove_file(&temp_path);
 
             if !output.status.success() {
                 let stderr = String::from_utf8_lossy(&output.stderr);
@@ -211,6 +213,10 @@ impl DnsManager {
     }
 
     pub fn add_entry(domain: &str, ip: &str) -> Result<(), AppError> {
+        utils::validate_domain(domain)?;
+        if ip.parse::<std::net::IpAddr>().is_err() {
+            return Err(AppError::Config(format!("Invalid IP address: '{}'", ip)));
+        }
         let content = Self::read_hosts()?;
         let mut entries = Self::get_lokcal_entries(&content);
         entries.retain(|e| e.domain != domain);
@@ -314,6 +320,7 @@ impl DnsManager {
     /// Start dnsmasq as user service (NO password needed).
     /// Call this on every app startup to ensure dnsmasq is running.
     pub fn ensure_dnsmasq_running(tld: &str) -> Result<(), AppError> {
+        utils::validate_domain(tld)?;
         #[cfg(target_os = "macos")]
         {
             if !Self::is_dnsmasq_installed() {
@@ -398,6 +405,7 @@ impl DnsManager {
     /// The resolver file (/etc/resolver/{tld}) needs ONE password prompt.
     /// After that, dnsmasq runs on port 5353 (no root) and auto-starts.
     pub fn setup_resolver(tld: &str) -> Result<(), AppError> {
+        utils::validate_domain(tld)?;
         #[cfg(target_os = "macos")]
         {
             utils::ensure_homebrew()?;

@@ -11,7 +11,7 @@ pub async fn ai_chat(app: tauri::AppHandle, messages: Vec<AiMessage>) -> Result<
     ai_service::chat_stream(&app, messages).await
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn ai_execute_tool(tool_name: String, arguments: String) -> Result<String, AppError> {
     ai_service::execute_tool(&tool_name, &arguments)
 }

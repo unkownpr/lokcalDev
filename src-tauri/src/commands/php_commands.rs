@@ -17,12 +17,12 @@ pub async fn php_install_version(
     PhpManager::install_version(&app, &version).await
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn php_remove_version(version: String) -> Result<(), AppError> {
     PhpManager::remove_version(&version)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn php_start_fpm(
     state: State<'_, AppState>,
     version: String,
@@ -58,19 +58,24 @@ pub fn php_start_fpm(
     Ok(info)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn php_stop_fpm(
     state: State<'_, AppState>,
     version: String,
 ) -> Result<ServiceInfo, AppError> {
     let service_id = format!("php-fpm-{}", version);
 
-    // Remove child process handle (don't SIGKILL - let stop_fpm() SIGTERM gracefully)
-    if let Ok(mut procs) = state.child_processes.lock() {
-        procs.remove(&service_id);
-    }
-
+    // Take the child handle (don't SIGKILL - let the manager SIGTERM gracefully and wait),
+    // then reap it so it doesn't linger as a zombie
+    let child = state
+        .child_processes
+        .lock()
+        .ok()
+        .and_then(|mut procs| procs.remove(&service_id));
     PhpManager::stop_fpm(&version)?;
+    if let Some(mut child) = child {
+        let _ = child.try_wait();
+    }
 
     let info = ServiceInfo {
         id: service_id.clone(),
@@ -92,18 +97,24 @@ pub fn php_stop_fpm(
     Ok(info)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn php_restart_fpm(
     state: State<'_, AppState>,
     version: String,
 ) -> Result<ServiceInfo, AppError> {
     let service_id = format!("php-fpm-{}", version);
 
-    // Stop first (don't SIGKILL - let stop_fpm() SIGTERM gracefully)
-    if let Ok(mut procs) = state.child_processes.lock() {
-        procs.remove(&service_id);
-    }
+    // Take the child handle (don't SIGKILL - let the manager SIGTERM gracefully and wait),
+    // then reap it so it doesn't linger as a zombie
+    let child = state
+        .child_processes
+        .lock()
+        .ok()
+        .and_then(|mut procs| procs.remove(&service_id));
     PhpManager::stop_fpm(&version)?;
+    if let Some(mut child) = child {
+        let _ = child.try_wait();
+    }
 
     // Start again
     let (child, pid) = PhpManager::start_fpm(&version)?;

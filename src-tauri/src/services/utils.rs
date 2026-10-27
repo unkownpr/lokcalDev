@@ -56,6 +56,52 @@ pub fn kill_process(pid: u32) {
     }
 }
 
+/// Like `is_process_alive`, but treats zombies (exited, not yet reaped) as gone.
+/// Used when waiting for a process we may have spawned ourselves to exit.
+fn is_process_running(pid: u32) -> bool {
+    #[cfg(unix)]
+    {
+        if let Ok(o) = Command::new("ps")
+            .args(["-o", "stat=", "-p", &pid.to_string()])
+            .output()
+        {
+            let stat = String::from_utf8_lossy(&o.stdout);
+            let stat = stat.trim();
+            return !stat.is_empty() && !stat.starts_with('Z');
+        }
+    }
+    is_process_alive(pid)
+}
+
+/// Poll until the process exits or the timeout elapses. Returns true if it exited.
+pub fn wait_for_exit(pid: u32, timeout: std::time::Duration) -> bool {
+    let deadline = std::time::Instant::now() + timeout;
+    loop {
+        if !is_process_running(pid) {
+            return true;
+        }
+        if std::time::Instant::now() >= deadline {
+            return false;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(100));
+    }
+}
+
+/// Gracefully stop a process and wait for it to exit, so its port, socket and
+/// data-dir locks are released before a restart. Force-kills after `timeout`.
+pub fn stop_process(pid: u32, timeout: std::time::Duration) {
+    kill_process(pid);
+    if wait_for_exit(pid, timeout) {
+        return;
+    }
+    log::warn!("Process {} did not exit within {:?}, force killing", pid, timeout);
+    #[cfg(unix)]
+    {
+        let _ = Command::new("kill").args(["-9", &pid.to_string()]).output();
+    }
+    wait_for_exit(pid, std::time::Duration::from_secs(2));
+}
+
 /// Get the Homebrew prefix path (macOS only). Cached after first call.
 #[cfg(target_os = "macos")]
 pub fn get_brew_prefix() -> PathBuf {
@@ -138,5 +184,25 @@ pub fn php_version_to_port(version: &str) -> u16 {
         "8.3" => 9083,
         "8.4" => 9084,
         _ => 9085,
+    }
+}
+
+/// Validate a hostname used in file names, nginx configs, hosts entries and
+/// privileged shell commands. Allows only `[A-Za-z0-9.-]`, no empty labels and
+/// no label starting or ending with `-`.
+pub fn validate_domain(domain: &str) -> Result<(), AppError> {
+    let valid = !domain.is_empty()
+        && domain.len() <= 253
+        && domain.split('.').all(|label| {
+            !label.is_empty()
+                && label.len() <= 63
+                && !label.starts_with('-')
+                && !label.ends_with('-')
+                && label.chars().all(|c| c.is_ascii_alphanumeric() || c == '-')
+        });
+    if valid {
+        Ok(())
+    } else {
+        Err(AppError::Config(format!("Invalid domain name: '{}'", domain)))
     }
 }

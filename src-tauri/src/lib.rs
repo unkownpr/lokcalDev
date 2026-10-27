@@ -193,25 +193,28 @@ pub fn run() {
 }
 
 fn shutdown_services(app_handle: &tauri::AppHandle) {
-    // 1. Kill all tracked child processes
-    let state = app_handle.state::<AppState>();
-    if let Ok(mut children) = state.child_processes.lock() {
-        for (name, child) in children.iter_mut() {
-            log::info!("Shutting down child process: {}", name);
-            let _ = child.kill();
-            let _ = child.wait();
-        }
-        children.clear();
-    }
-
-    // 2. Safety net: stop services via their managers
-    log::info!("Running service shutdown safety net...");
+    // 1. Stop services gracefully via their managers (SIGTERM + wait), so MariaDB
+    //    can flush InnoDB/Aria instead of being SIGKILLed.
+    log::info!("Stopping services...");
     let _ = NginxManager::stop();
     let _ = MariaDbManager::stop();
 
     // Stop all PHP-FPM versions
     for version in &["8.1", "8.2", "8.3", "8.4"] {
         let _ = PhpManager::stop_fpm(version);
+    }
+
+    // 2. Safety net: kill and reap any tracked child processes still running
+    let state = app_handle.state::<AppState>();
+    if let Ok(mut children) = state.child_processes.lock() {
+        for (name, child) in children.iter_mut() {
+            if !matches!(child.try_wait(), Ok(Some(_))) {
+                log::info!("Killing child process: {}", name);
+                let _ = child.kill();
+                let _ = child.wait();
+            }
+        }
+        children.clear();
     }
 
     log::info!("All services stopped");

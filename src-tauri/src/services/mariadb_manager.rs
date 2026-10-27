@@ -376,7 +376,8 @@ impl MariaDbManager {
         if pid_path.exists() {
             if let Ok(pid_str) = std::fs::read_to_string(&pid_path) {
                 if let Ok(pid) = pid_str.trim().parse::<u32>() {
-                    utils::kill_process(pid);
+                    // InnoDB shutdown can take a while; wait so a restart doesn't hit the port/datadir lock
+                    utils::stop_process(pid, std::time::Duration::from_secs(30));
                 }
             }
             let _ = std::fs::remove_file(&pid_path);

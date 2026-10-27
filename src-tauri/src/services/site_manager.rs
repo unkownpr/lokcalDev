@@ -86,7 +86,21 @@ impl SiteManager {
         toml::from_str(&content).map_err(|e| AppError::Config(e.to_string()))
     }
 
+    /// Directory nginx should serve for a site (Laravel serves `{document_root}/public`).
+    fn nginx_root(site: &Site) -> String {
+        if site.template.as_deref() == Some("laravel") {
+            std::path::Path::new(&site.document_root)
+                .join("public")
+                .to_string_lossy()
+                .to_string()
+        } else {
+            site.document_root.clone()
+        }
+    }
+
     pub fn create(req: CreateSiteRequest) -> Result<Site, AppError> {
+        utils::validate_domain(&req.domain)?;
+
         // Ensure sites directory exists
         let sites_dir = paths::get_sites_dir();
         std::fs::create_dir_all(&sites_dir)?;
@@ -129,13 +143,10 @@ impl SiteManager {
         }
 
         // For Laravel, nginx root should point to {document_root}/public
-        let nginx_root = if site.template.as_deref() == Some("laravel") {
-            let public_dir = doc_root.join("public");
-            std::fs::create_dir_all(&public_dir)?;
-            public_dir.to_string_lossy().to_string()
-        } else {
-            req.document_root.clone()
-        };
+        let nginx_root = Self::nginx_root(&site);
+        if site.template.as_deref() == Some("laravel") {
+            std::fs::create_dir_all(&nginx_root)?;
+        }
 
         // Generate nginx config
         let php_port = utils::php_version_to_port(&req.php_version);
@@ -174,6 +185,9 @@ impl SiteManager {
     }
 
     pub fn update(id: &str, req: UpdateSiteRequest) -> Result<Site, AppError> {
+        if let Some(domain) = &req.domain {
+            utils::validate_domain(domain)?;
+        }
         let mut site = Self::get(id)?;
         let old_domain = site.domain.clone();
 
@@ -201,9 +215,15 @@ impl SiteManager {
             .map_err(|e| AppError::Config(e.to_string()))?;
         std::fs::write(Self::get_site_file(id), &toml_str)?;
 
-        // Remove old nginx config if domain changed
+        // Remove old nginx config and DNS entry if domain changed, add DNS for the new one
         if old_domain != site.domain {
             NginxConfigGenerator::remove_site_config(&old_domain)?;
+            Self::remove_dns_entry(&old_domain);
+            if let Err(e) = Self::ensure_dns_entry(&site.domain) {
+                let warning = format!("DNS entry could not be added for '{}': {}", site.domain, e);
+                log::warn!("{}", warning);
+                site.dns_warning = Some(warning);
+            }
         }
 
         // If site is inactive, remove nginx config
@@ -224,7 +244,7 @@ impl SiteManager {
             let nginx_info = NginxManager::get_info();
             let nginx_config = NginxConfigGenerator::generate_site_config(
                 &site.domain,
-                &site.document_root,
+                &Self::nginx_root(&site),
                 php_port,
                 site.ssl,
                 ssl_cert.as_deref(),
@@ -264,12 +284,7 @@ impl SiteManager {
             let php_port = utils::php_version_to_port(&site.php_version);
 
             // For Laravel, nginx root should point to {document_root}/public
-            let nginx_root = if site.template.as_deref() == Some("laravel") {
-                let public_dir = std::path::Path::new(&site.document_root).join("public");
-                public_dir.to_string_lossy().to_string()
-            } else {
-                site.document_root.clone()
-            };
+            let nginx_root = Self::nginx_root(site);
 
             let (ssl_cert, ssl_key) = if site.ssl {
                 (

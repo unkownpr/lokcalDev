@@ -1,7 +1,6 @@
 use crate::config::paths;
 use crate::error::AppError;
 use crate::services::download_manager::DownloadManager;
-use crate::services::nginx_config::NginxConfigGenerator;
 use crate::services::nginx_manager::NginxManager;
 use crate::services::site_manager::SiteManager;
 use crate::services::utils;
@@ -102,35 +101,8 @@ impl PhpMyAdminManager {
 
     fn refresh_nginx() -> Result<(), AppError> {
         // Regenerate all site configs to include /phpmyadmin location
-        if let Ok(sites) = SiteManager::list() {
-            let ssl_dir = paths::get_ssl_dir();
-            for site in &sites {
-                if !site.active {
-                    continue;
-                }
-                let php_port = utils::php_version_to_port(&site.php_version);
-                let (ssl_cert, ssl_key) = if site.ssl {
-                    (
-                        Some(ssl_dir.join(format!("{}.pem", site.domain)).to_string_lossy().to_string()),
-                        Some(ssl_dir.join(format!("{}-key.pem", site.domain)).to_string_lossy().to_string()),
-                    )
-                } else {
-                    (None, None)
-                };
-                let nginx_info = NginxManager::get_info();
-                let config = NginxConfigGenerator::generate_site_config(
-                    &site.domain,
-                    &site.document_root,
-                    php_port,
-                    site.ssl,
-                    ssl_cert.as_deref(),
-                    ssl_key.as_deref(),
-                    nginx_info.port,
-                    nginx_info.ssl_port,
-                );
-                let _ = NginxConfigGenerator::write_site_config(&site.domain, &config);
-            }
-            log::info!("Regenerated {} site configs with phpMyAdmin location", sites.len());
+        if let Err(e) = SiteManager::regenerate_all_configs() {
+            log::warn!("Failed to regenerate site configs: {}", e);
         }
 
         // Restart nginx so ensure_config picks up phpMyAdmin in default server

@@ -547,11 +547,38 @@ pub fn execute_tool(tool_name: &str, arguments: &str) -> Result<String, AppError
                 .find(|s| s.domain == domain)
                 .ok_or_else(|| AppError::NotFound(format!("Site with domain '{}' not found", domain)))?;
 
-            let file_path = std::path::Path::new(&site.document_root).join(filename);
+            // The filename comes from the model: keep it strictly inside the document root.
+            let rel = std::path::Path::new(filename);
+            if filename.is_empty()
+                || rel.is_absolute()
+                || rel
+                    .components()
+                    .any(|c| !matches!(c, std::path::Component::Normal(_)))
+            {
+                return Err(AppError::Config(
+                    "filename must be a relative path inside the site".into(),
+                ));
+            }
+
+            let doc_root = std::path::Path::new(&site.document_root);
+            let file_path = doc_root.join(rel);
 
             // Ensure parent directories exist
             if let Some(parent) = file_path.parent() {
                 std::fs::create_dir_all(parent)?;
+            }
+
+            // Reject symlinks that resolve outside the document root
+            let canon_root = doc_root.canonicalize()?;
+            let canon_target = if file_path.exists() {
+                file_path.canonicalize()?
+            } else {
+                file_path.parent().unwrap_or(doc_root).canonicalize()?
+            };
+            if !canon_target.starts_with(&canon_root) {
+                return Err(AppError::Config(
+                    "filename resolves outside the site directory".into(),
+                ));
             }
 
             std::fs::write(&file_path, content)?;

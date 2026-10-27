@@ -154,6 +154,16 @@ impl PhpManager {
 
     // --- Core functions ---
 
+    /// Reject anything that isn't a supported version: the string is used in paths
+    /// (`remove_dir_all`), brew formula names and service ids.
+    fn validate_version(version: &str) -> Result<(), AppError> {
+        if PHP_VERSIONS.contains(&version) {
+            Ok(())
+        } else {
+            Err(AppError::Config(format!("Unsupported PHP version: {}", version)))
+        }
+    }
+
     pub fn list_versions() -> Vec<PhpVersion> {
         PHP_VERSIONS
             .iter()
@@ -191,6 +201,7 @@ impl PhpManager {
 
     #[cfg(target_os = "macos")]
     pub async fn install_version(app: &AppHandle, version: &str) -> Result<PhpVersion, AppError> {
+        Self::validate_version(version)?;
         if Self::is_installed_via_brew(version) {
             return Err(AppError::Service(format!(
                 "PHP {} is already installed",
@@ -270,6 +281,7 @@ impl PhpManager {
 
     #[cfg(target_os = "windows")]
     pub async fn install_version(app: &AppHandle, version: &str) -> Result<PhpVersion, AppError> {
+        Self::validate_version(version)?;
         let version_dir = Self::get_version_dir(version);
         if version_dir.exists() {
             return Err(AppError::Service(format!(
@@ -308,6 +320,7 @@ impl PhpManager {
 
     #[cfg(target_os = "macos")]
     pub fn remove_version(version: &str) -> Result<(), AppError> {
+        Self::validate_version(version)?;
         let _ = Self::stop_fpm(version);
         let formula = format!("shivammathur/php/php@{}", version);
         let output = Command::new("brew")
@@ -325,6 +338,7 @@ impl PhpManager {
 
     #[cfg(not(target_os = "macos"))]
     pub fn remove_version(version: &str) -> Result<(), AppError> {
+        Self::validate_version(version)?;
         let version_dir = Self::get_version_dir(version);
         if !version_dir.exists() {
             return Err(AppError::NotFound(format!(
@@ -341,6 +355,7 @@ impl PhpManager {
     // --- FPM start/stop ---
 
     pub fn start_fpm(version: &str) -> Result<(Child, u32), AppError> {
+        Self::validate_version(version)?;
         let fpm_bin = Self::get_php_fpm_binary(version);
         if !fpm_bin.exists() {
             return Err(AppError::NotFound(format!(
@@ -402,11 +417,12 @@ impl PhpManager {
     }
 
     pub fn stop_fpm(version: &str) -> Result<(), AppError> {
+        Self::validate_version(version)?;
         let pid_path = Self::get_fpm_pid_path(version);
         if pid_path.exists() {
             if let Ok(pid_str) = std::fs::read_to_string(&pid_path) {
                 if let Ok(pid) = pid_str.trim().parse::<u32>() {
-                    utils::kill_process(pid);
+                    utils::stop_process(pid, std::time::Duration::from_secs(10));
                 }
             }
             let _ = std::fs::remove_file(&pid_path);
@@ -485,6 +501,7 @@ impl PhpManager {
     // --- INI read/write ---
 
     pub fn get_ini(version: &str) -> Result<Vec<PhpIniDirective>, AppError> {
+        Self::validate_version(version)?;
         let ini_path = Self::get_php_ini_path(version);
         if !ini_path.exists() {
             return Ok(Vec::new());
@@ -516,6 +533,15 @@ impl PhpManager {
     }
 
     pub fn set_ini_directive(version: &str, key: &str, value: &str) -> Result<(), AppError> {
+        Self::validate_version(version)?;
+        // A newline would let the caller inject arbitrary extra directives
+        if key.trim().is_empty()
+            || key.contains('=')
+            || key.contains(['\n', '\r'])
+            || value.contains(['\n', '\r'])
+        {
+            return Err(AppError::Config("Invalid php.ini directive".to_string()));
+        }
         let ini_path = Self::get_php_ini_path(version);
         if !ini_path.exists() {
             return Err(AppError::NotFound(format!(
@@ -553,6 +579,7 @@ impl PhpManager {
     // --- Extensions ---
 
     pub fn list_extensions(version: &str) -> Result<Vec<PhpExtension>, AppError> {
+        Self::validate_version(version)?;
         let php_bin = Self::get_php_binary(version);
         if !php_bin.exists() {
             return Err(AppError::NotFound(format!(
@@ -599,6 +626,10 @@ impl PhpManager {
         extension: &str,
         enable: bool,
     ) -> Result<(), AppError> {
+        Self::validate_version(version)?;
+        if extension.is_empty() || extension.contains(['\n', '\r']) {
+            return Err(AppError::Config("Invalid extension name".to_string()));
+        }
         let ini_path = Self::get_php_ini_path(version);
         if !ini_path.exists() {
             return Err(AppError::NotFound(format!(

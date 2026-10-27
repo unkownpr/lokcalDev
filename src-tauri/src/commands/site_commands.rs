@@ -13,7 +13,7 @@ pub fn site_get(id: String) -> Result<Site, AppError> {
     SiteManager::get(&id)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn site_create(
     name: String,
     domain: String,
@@ -32,7 +32,7 @@ pub fn site_create(
     })
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn site_update(
     id: String,
     name: Option<String>,
@@ -55,7 +55,7 @@ pub fn site_update(
     )
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn site_delete(id: String) -> Result<(), AppError> {
     SiteManager::delete(&id)
 }

@@ -2,7 +2,7 @@ use crate::config::paths;
 use crate::error::AppError;
 use crate::state::AppState;
 use serde::Serialize;
-use std::io::{BufRead, BufReader, Seek, SeekFrom};
+use std::io::{BufRead, BufReader, Read, Seek, SeekFrom};
 use tauri::{AppHandle, Emitter, State};
 use tokio_util::sync::CancellationToken;
 
@@ -80,21 +80,35 @@ pub fn log_list_files() -> Result<Vec<LogFile>, AppError> {
     Ok(files)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn log_read_file(path: String, lines: Option<usize>) -> Result<Vec<String>, AppError> {
     let validated_path = validate_log_path(&path)?;
     let file = std::fs::File::open(&validated_path)?;
-    let reader = BufReader::new(file);
-    let all_lines: Vec<String> = reader.lines().filter_map(|l| l.ok()).collect();
+    let mut reader = BufReader::new(file);
 
+    // Keep only the last `count` lines in memory; decode lossily so a line with
+    // invalid UTF-8 doesn't get dropped.
     let count = lines.unwrap_or(500);
-    let start = if all_lines.len() > count {
-        all_lines.len() - count
-    } else {
-        0
-    };
+    let mut tail: std::collections::VecDeque<String> = std::collections::VecDeque::with_capacity(count);
+    let mut buf = Vec::new();
+    loop {
+        buf.clear();
+        if reader.read_until(b'\n', &mut buf)? == 0 {
+            break;
+        }
+        if tail.len() == count {
+            tail.pop_front();
+        }
+        if count > 0 {
+            tail.push_back(
+                String::from_utf8_lossy(&buf)
+                    .trim_end_matches(['\r', '\n'])
+                    .to_string(),
+            );
+        }
+    }
 
-    Ok(all_lines[start..].to_vec())
+    Ok(tail.into())
 }
 
 #[tauri::command]
@@ -125,35 +139,54 @@ pub async fn log_start_tailing(
 
         let path_str = validated_path.to_string_lossy().to_string();
 
-        tokio::spawn(async move {
-            let mut last_pos = 0u64;
+        // Start at the current end: the frontend already loaded the existing
+        // content via log_read_file, so only stream lines appended from now on.
+        let mut last_pos = std::fs::metadata(&validated_path)
+            .map(|m| m.len())
+            .unwrap_or(0);
 
+        tokio::spawn(async move {
             loop {
                 tokio::select! {
                     _ = token.cancelled() => {
                         break;
                     }
                     _ = tokio::time::sleep(tokio::time::Duration::from_millis(500)) => {
-                        if let Ok(file) = std::fs::File::open(&path_str) {
-                            if let Ok(metadata) = file.metadata() {
-                                let current_size = metadata.len();
-                                if current_size > last_pos {
-                                    let mut reader = BufReader::new(file);
-                                    if reader.seek(SeekFrom::Start(last_pos)).is_ok() {
-                                        for line in reader.lines() {
-                                            if let Ok(line) = line {
-                                                let _ = app.emit(
-                                                    "log-line",
-                                                    LogLine {
-                                                        file: file_name.clone(),
-                                                        line,
-                                                    },
-                                                );
-                                            }
-                                        }
-                                    }
-                                    last_pos = current_size;
+                        let Ok(file) = std::fs::File::open(&path_str) else { continue };
+                        let Ok(metadata) = file.metadata() else { continue };
+                        let current_size = metadata.len();
+                        if current_size < last_pos {
+                            // File was truncated/rotated: start over from the beginning
+                            last_pos = 0;
+                        }
+                        if current_size == last_pos {
+                            continue;
+                        }
+                        let mut reader = BufReader::new(file);
+                        if reader.seek(SeekFrom::Start(last_pos)).is_err() {
+                            continue;
+                        }
+                        // Emit only complete lines up to the observed size; a trailing
+                        // partial line is picked up on the next tick.
+                        let mut reader = reader.take(current_size - last_pos);
+                        let mut buf = Vec::new();
+                        loop {
+                            buf.clear();
+                            match reader.read_until(b'\n', &mut buf) {
+                                Ok(n) if n > 0 && buf.ends_with(b"\n") => {
+                                    last_pos += n as u64;
+                                    let line = String::from_utf8_lossy(&buf)
+                                        .trim_end_matches(['\r', '\n'])
+                                        .to_string();
+                                    let _ = app.emit(
+                                        "log-line",
+                                        LogLine {
+                                            file: file_name.clone(),
+                                            line,
+                                        },
+                                    );
                                 }
+                                _ => break,
                             }
                         }
                     }

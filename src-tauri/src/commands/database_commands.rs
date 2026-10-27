@@ -13,12 +13,12 @@ pub fn mariadb_get_info() -> Result<MariaDbInfo, AppError> {
     Ok(MariaDbManager::get_info())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn mariadb_initialize() -> Result<(), AppError> {
     MariaDbManager::initialize_db()
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn mariadb_start(state: State<'_, AppState>) -> Result<ServiceInfo, AppError> {
     let child = MariaDbManager::start()?;
     let pid = child.id();
@@ -50,14 +50,19 @@ pub fn mariadb_start(state: State<'_, AppState>) -> Result<ServiceInfo, AppError
     Ok(info)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn mariadb_stop(state: State<'_, AppState>) -> Result<ServiceInfo, AppError> {
-    // Remove child process handle (don't SIGKILL - let stop() SIGTERM gracefully)
-    if let Ok(mut procs) = state.child_processes.lock() {
-        procs.remove("mariadb");
-    }
-
+    // Take the child handle (don't SIGKILL - let the manager SIGTERM gracefully and wait),
+    // then reap it so it doesn't linger as a zombie
+    let child = state
+        .child_processes
+        .lock()
+        .ok()
+        .and_then(|mut procs| procs.remove("mariadb"));
     MariaDbManager::stop()?;
+    if let Some(mut child) = child {
+        let _ = child.try_wait();
+    }
 
     let db_info = MariaDbManager::get_info();
     let info = ServiceInfo {
@@ -80,13 +85,19 @@ pub fn mariadb_stop(state: State<'_, AppState>) -> Result<ServiceInfo, AppError>
     Ok(info)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn mariadb_restart(state: State<'_, AppState>) -> Result<ServiceInfo, AppError> {
-    // Stop first (don't SIGKILL - let stop() SIGTERM gracefully)
-    if let Ok(mut procs) = state.child_processes.lock() {
-        procs.remove("mariadb");
-    }
+    // Take the child handle (don't SIGKILL - let the manager SIGTERM gracefully and wait),
+    // then reap it so it doesn't linger as a zombie
+    let child = state
+        .child_processes
+        .lock()
+        .ok()
+        .and_then(|mut procs| procs.remove("mariadb"));
     MariaDbManager::stop()?;
+    if let Some(mut child) = child {
+        let _ = child.try_wait();
+    }
 
     let child = MariaDbManager::start()?;
     let pid = child.id();

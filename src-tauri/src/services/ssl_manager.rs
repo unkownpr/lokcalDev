@@ -1,6 +1,7 @@
 use crate::config::paths;
 use crate::error::AppError;
 use crate::services::download_manager::DownloadManager;
+use crate::services::utils;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use std::process::Command;
@@ -118,6 +119,7 @@ impl SslManager {
     }
 
     pub fn generate_certificate(domain: &str) -> Result<CertificateInfo, AppError> {
+        utils::validate_domain(domain)?;
         let binary = Self::get_mkcert_binary();
         if !binary.exists() {
             return Err(AppError::NotFound("mkcert is not installed".to_string()));
@@ -157,6 +159,7 @@ impl SslManager {
     }
 
     pub fn remove_certificate(domain: &str) -> Result<(), AppError> {
+        utils::validate_domain(domain)?;
         let ssl_dir = paths::get_ssl_dir();
         let cert_path = ssl_dir.join(format!("{}.pem", domain));
         let key_path = ssl_dir.join(format!("{}-key.pem", domain));
