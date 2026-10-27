@@ -336,6 +336,13 @@ impl MariaDbManager {
         let pid_path = Self::get_pid_path();
         let log_path = Self::get_log_path();
 
+        if let (true, pid) = utils::read_pid_file(&pid_path) {
+            return Err(AppError::Service(format!(
+                "MariaDB is already running (PID {})",
+                pid.unwrap_or(0)
+            )));
+        }
+
         let mut cmd = Command::new(&mysqld);
         cmd.arg("--no-defaults")
             .arg(format!("--basedir={}", utils::to_forward_slash(&base_dir)))

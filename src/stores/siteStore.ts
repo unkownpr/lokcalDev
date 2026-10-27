@@ -128,10 +128,19 @@ export const useSiteStore = create<SiteStore>((set, get) => ({
     const newDomain = data.domain ?? oldSite?.domain
     const sslToggled = data.ssl !== undefined && data.ssl !== oldSite?.ssl
     const domainChanged = data.domain !== undefined && data.domain !== oldSite?.domain
+    let sslFailed = false
     if (newSsl && newDomain && (sslToggled || domainChanged)) {
       try {
         await tauri.sslGenerateCertificate(newDomain)
-      } catch {}
+      } catch {
+        // Nginx config already points at the missing cert - disable SSL so nginx can still load
+        sslFailed = true
+        try {
+          await tauri.siteUpdate(id, undefined, undefined, undefined, undefined, false, undefined)
+        } catch {
+          // best effort; the warning below still tells the user SSL is not working
+        }
+      }
     }
 
     // Reload nginx
@@ -140,7 +149,13 @@ export const useSiteStore = create<SiteStore>((set, get) => ({
     } catch {}
 
     await get().fetchSites()
-    toast.success("Site updated")
+    if (sslFailed) {
+      toast.warning("SSL certificate could not be generated", {
+        description: "Site updated without SSL. Install mkcert + Root CA from SSL page first.",
+      })
+    } else {
+      toast.success("Site updated")
+    }
   },
 
   deleteSite: async (id) => {

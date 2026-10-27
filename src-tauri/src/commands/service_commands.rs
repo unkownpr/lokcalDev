@@ -10,6 +10,11 @@ use tauri::State;
 
 #[tauri::command]
 pub fn get_all_services(state: State<'_, AppState>) -> Result<Vec<ServiceInfo>, AppError> {
+    // Reap tracked children that exited on their own so they stop showing as running.
+    if let Ok(mut children) = state.child_processes.lock() {
+        children.retain(|_, c| !matches!(c.try_wait(), Ok(Some(_))));
+    }
+
     // Refresh real installation/running status from managers
     let nginx_info = NginxManager::get_info();
     let mariadb_info = MariaDbManager::get_info();
@@ -26,6 +31,7 @@ pub fn get_all_services(state: State<'_, AppState>) -> Result<Vec<ServiceInfo>, 
         svc.installed = nginx_info.installed;
         svc.initialized = true;
         svc.version = nginx_info.version;
+        svc.port = Some(nginx_info.port);
         if nginx_info.running {
             svc.status = ServiceStatus::Running;
             svc.pid = nginx_info.pid;

@@ -351,8 +351,9 @@ impl DnsManager {
 
             let needs_address = !has_address;
             let needs_port = !has_port;
+            let changed = needs_address || needs_port;
 
-            if needs_address || needs_port {
+            if changed {
                 let mut new_content = content.clone();
                 if !new_content.is_empty() && !new_content.ends_with('\n') {
                     new_content.push('\n');
@@ -370,9 +371,10 @@ impl DnsManager {
                 log::info!("Updated dnsmasq config (port 5353, .{})", tld);
             }
 
-            // Start dnsmasq as user service (NO sudo needed on port 5353)
-            if !Self::is_dnsmasq_running() {
-                // Stop any old system-level service first (ignore errors)
+            // Start dnsmasq as user service (NO sudo needed on port 5353). A running dnsmasq
+            // must be restarted after a config change: SIGHUP does not re-read port=/address=.
+            if changed || !Self::is_dnsmasq_running() {
+                // Stop any old/running service first (ignore errors)
                 let _ = std::process::Command::new("brew")
                     .args(["services", "stop", "dnsmasq"])
                     .output();
@@ -389,7 +391,7 @@ impl DnsManager {
 
                 // Wait a moment for dnsmasq to bind
                 std::thread::sleep(std::time::Duration::from_millis(500));
-                log::info!("Started dnsmasq on port 5353");
+                log::info!("(Re)started dnsmasq on port 5353");
             }
 
             Ok(())

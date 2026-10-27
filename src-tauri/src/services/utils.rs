@@ -58,7 +58,7 @@ pub fn kill_process(pid: u32) {
 
 /// Like `is_process_alive`, but treats zombies (exited, not yet reaped) as gone.
 /// Used when waiting for a process we may have spawned ourselves to exit.
-fn is_process_running(pid: u32) -> bool {
+pub fn is_process_running(pid: u32) -> bool {
     #[cfg(unix)]
     {
         if let Ok(o) = Command::new("ps")
@@ -163,12 +163,13 @@ pub fn ensure_homebrew() -> Result<(), AppError> {
     Ok(())
 }
 
-/// Read a PID file and return the PID if the process is alive.
+/// Read a PID file and return the PID if the process is running.
+/// Zombies count as stopped: a crashed child we still hold has not been reaped yet.
 pub fn read_pid_file(pid_path: &Path) -> (bool, Option<u32>) {
     if pid_path.exists() {
         if let Ok(pid_str) = std::fs::read_to_string(pid_path) {
             if let Ok(pid) = pid_str.trim().parse::<u32>() {
-                let alive = is_process_alive(pid);
+                let alive = is_process_running(pid);
                 return (alive, if alive { Some(pid) } else { None });
             }
         }

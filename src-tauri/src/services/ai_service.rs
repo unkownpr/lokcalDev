@@ -563,22 +563,33 @@ pub fn execute_tool(tool_name: &str, arguments: &str) -> Result<String, AppError
             let doc_root = std::path::Path::new(&site.document_root);
             let file_path = doc_root.join(rel);
 
-            // Ensure parent directories exist
-            if let Some(parent) = file_path.parent() {
-                std::fs::create_dir_all(parent)?;
-            }
-
-            // Reject symlinks that resolve outside the document root
+            // Containment check before touching the filesystem. symlink_metadata is used so a
+            // dangling symlink counts as existing (Path::exists follows links and says false).
             let canon_root = doc_root.canonicalize()?;
-            let canon_target = if file_path.exists() {
-                file_path.canonicalize()?
-            } else {
-                file_path.parent().unwrap_or(doc_root).canonicalize()?
-            };
-            if !canon_target.starts_with(&canon_root) {
+            let is_symlink = file_path
+                .symlink_metadata()
+                .map(|m| m.file_type().is_symlink())
+                .unwrap_or(false);
+            if is_symlink {
+                return Err(AppError::Config("filename must not be a symlink".into()));
+            }
+            // The deepest existing ancestor must resolve inside the root; canonicalize fails on
+            // a dangling intermediate symlink, which rejects that case too.
+            let mut existing = file_path.as_path();
+            while existing.symlink_metadata().is_err() {
+                match existing.parent() {
+                    Some(p) => existing = p,
+                    None => break,
+                }
+            }
+            if !existing.canonicalize()?.starts_with(&canon_root) {
                 return Err(AppError::Config(
                     "filename resolves outside the site directory".into(),
                 ));
+            }
+
+            if let Some(parent) = file_path.parent() {
+                std::fs::create_dir_all(parent)?;
             }
 
             std::fs::write(&file_path, content)?;

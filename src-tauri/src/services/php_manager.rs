@@ -367,6 +367,14 @@ impl PhpManager {
 
         let port = utils::php_version_to_port(version);
 
+        if let (true, pid) = utils::read_pid_file(&Self::get_fpm_pid_path(version)) {
+            return Err(AppError::Service(format!(
+                "PHP-FPM {} is already running (PID {})",
+                version,
+                pid.unwrap_or(0)
+            )));
+        }
+
         #[cfg(target_os = "windows")]
         let child = {
             // Windows: php-cgi.exe in FastCGI mode bound to a port

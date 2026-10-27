@@ -98,8 +98,23 @@ impl SiteManager {
         }
     }
 
+    /// Sites share nginx config, certificate and hosts entry by domain, so domains must be unique.
+    fn ensure_domain_free(domain: &str, except_id: Option<&str>) -> Result<(), AppError> {
+        let taken = Self::list()?
+            .iter()
+            .any(|s| s.domain.eq_ignore_ascii_case(domain) && Some(s.id.as_str()) != except_id);
+        if taken {
+            return Err(AppError::Config(format!(
+                "Domain '{}' is already used by another site",
+                domain
+            )));
+        }
+        Ok(())
+    }
+
     pub fn create(req: CreateSiteRequest) -> Result<Site, AppError> {
         utils::validate_domain(&req.domain)?;
+        Self::ensure_domain_free(&req.domain, None)?;
 
         // Ensure sites directory exists
         let sites_dir = paths::get_sites_dir();
@@ -187,6 +202,7 @@ impl SiteManager {
     pub fn update(id: &str, req: UpdateSiteRequest) -> Result<Site, AppError> {
         if let Some(domain) = &req.domain {
             utils::validate_domain(domain)?;
+            Self::ensure_domain_free(domain, Some(id))?;
         }
         let mut site = Self::get(id)?;
         let old_domain = site.domain.clone();

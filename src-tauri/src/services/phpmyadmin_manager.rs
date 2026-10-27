@@ -122,17 +122,8 @@ impl PhpMyAdminManager {
         let socket_path = paths::get_data_dir().join("data").join("mariadb.sock");
         let socket_str = socket_path.to_string_lossy().replace('\\', "/");
 
-        let blowfish_secret: String = (0..32)
-            .map(|_| {
-                let idx = (std::time::SystemTime::now()
-                    .duration_since(std::time::UNIX_EPOCH)
-                    .unwrap_or_default()
-                    .subsec_nanos()
-                    % 62) as usize;
-                let chars = b"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
-                chars[idx % chars.len()] as char
-            })
-            .collect();
+        // 32 hex chars from the OS CSPRNG (phpMyAdmin requires a 32-byte secret)
+        let blowfish_secret = uuid::Uuid::new_v4().simple().to_string();
 
         let config_content = format!(
             r#"<?php

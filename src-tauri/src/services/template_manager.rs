@@ -155,18 +155,13 @@ require_once ABSPATH . 'wp-settings.php';
     }
 
     fn random_string(len: usize) -> String {
-        use std::time::SystemTime;
+        // UUID v4 bytes come from the OS CSPRNG
         let chars = b"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*()-_=+[]{}|;:,.<>?";
         let mut result = String::with_capacity(len);
-        for i in 0..len {
-            let seed = SystemTime::now()
-                .duration_since(SystemTime::UNIX_EPOCH)
-                .unwrap_or_default()
-                .subsec_nanos()
-                .wrapping_add(i as u32)
-                .wrapping_mul(2654435761); // Knuth multiplicative hash
-            let idx = (seed as usize) % chars.len();
-            result.push(chars[idx] as char);
+        while result.len() < len {
+            for b in uuid::Uuid::new_v4().as_bytes().iter().take(len - result.len()) {
+                result.push(chars[*b as usize % chars.len()] as char);
+            }
         }
         result
     }

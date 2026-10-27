@@ -9,6 +9,7 @@ export function ServicesPage() {
   const startService = useServiceStore((s) => s.startService)
   const stopService = useServiceStore((s) => s.stopService)
   const restartService = useServiceStore((s) => s.restartService)
+  const nginxPort = services.find((s) => s.id === "nginx")?.port ?? 8080
 
   return (
     <div>
@@ -22,6 +23,7 @@ export function ServicesPage() {
           <ServiceCard
             key={service.id}
             service={service}
+            nginxPort={nginxPort}
             onInstall={installService}
             onInitialize={initializeService}
             onStart={startService}
