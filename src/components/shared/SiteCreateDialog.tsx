@@ -42,15 +42,14 @@ export function SiteCreateDialog({ onSubmit, phpVersions = [] }: SiteCreateDialo
   const [domain, setDomain] = useState("")
   const [documentRoot, setDocumentRoot] = useState("")
   const [phpVersion, setPhpVersion] = useState(preferredPhp)
+  const [phpTouched, setPhpTouched] = useState(false)
   const [ssl, setSsl] = useState(false)
   const [template, setTemplate] = useState("blank")
   const [submitting, setSubmitting] = useState(false)
 
   useEffect(() => {
-    if (phpVersions.length > 0 && !phpVersions.includes(phpVersion)) {
-      setPhpVersion(preferredPhp)
-    }
-  }, [phpVersions])
+    if (!phpTouched && preferredPhp) setPhpVersion(preferredPhp)
+  }, [preferredPhp, phpTouched])
 
   const handleNameChange = (value: string) => {
     setName(value)
@@ -69,6 +68,7 @@ export function SiteCreateDialog({ onSubmit, phpVersions = [] }: SiteCreateDialo
       setDomain("")
       setDocumentRoot("")
       setPhpVersion(preferredPhp)
+      setPhpTouched(false)
       setSsl(false)
       setTemplate("blank")
     } finally {
@@ -152,7 +152,13 @@ export function SiteCreateDialog({ onSubmit, phpVersions = [] }: SiteCreateDialo
             {phpVersions.length === 0 ? (
               <p className="text-xs text-muted-foreground">No PHP versions installed. Install one from the PHP page first.</p>
             ) : (
-              <Select value={phpVersion} onValueChange={setPhpVersion}>
+              <Select
+                value={phpVersion}
+                onValueChange={(v) => {
+                  setPhpVersion(v)
+                  setPhpTouched(true)
+                }}
+              >
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>

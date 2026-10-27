@@ -86,6 +86,7 @@ export const useSslStore = create<SslStore>((set, get) => ({
       await get().fetchCertificates()
     } catch (err) {
       set({ error: String(err) })
+      toast.error("Failed to remove certificate", { description: String(err) })
     }
   },
 

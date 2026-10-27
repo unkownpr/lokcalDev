@@ -41,6 +41,9 @@ pub fn settings_save(config: AppConfig) -> Result<(), AppError> {
     // The TLD ends up in dnsmasq config and /etc/resolver/<tld>.
     utils::validate_domain(&config.tld)?;
     PhpManager::validate_version(&config.default_php_version)?;
+    if !std::path::Path::new(&config.sites_directory).is_absolute() {
+        return Err(AppError::Config("Sites directory must be an absolute path".into()));
+    }
 
     let path = get_settings_path();
     if let Some(parent) = path.parent() {

@@ -134,14 +134,13 @@ fn get_tool_definitions() -> Vec<Value> {
             "type": "function",
             "function": {
                 "name": "create_site",
-                "description": "Create a new local development site",
+                "description": "Create a new blank PHP site (templates like Laravel/WordPress must be installed from the Sites page)",
                 "parameters": {
                     "type": "object",
                     "properties": {
                         "name": { "type": "string", "description": "Site name (e.g. 'My App')" },
                         "domain": { "type": "string", "description": "Domain (e.g. 'myapp.test')" },
-                        "php_version": { "type": "string", "description": "PHP version (e.g. '8.3')", "default": "8.3" },
-                        "template": { "type": "string", "description": "Site template: 'default', 'laravel', 'wordpress'", "default": "default" }
+                        "php_version": { "type": "string", "description": "PHP version (e.g. '8.3')", "default": "8.3" }
                     },
                     "required": ["name", "domain"]
                 }
@@ -355,6 +354,19 @@ pub async fn chat_stream(app: &AppHandle, messages: Vec<AiMessage>) -> Result<()
             }
 
             if let Ok(parsed) = serde_json::from_str::<Value>(data) {
+                // OpenRouter reports mid-stream failures as an `error` object instead of a delta.
+                if let Some(msg) = parsed["error"]["message"]
+                    .as_str()
+                    .or_else(|| parsed["choices"][0]["error"]["message"].as_str())
+                {
+                    let _ = app.emit("ai-stream", AiStreamChunk {
+                        chunk_type: "error".to_string(),
+                        content: None,
+                        tool_calls: None,
+                        error: Some(format!("OpenRouter error: {}", msg)),
+                    });
+                    return Ok(());
+                }
                 let delta = &parsed["choices"][0]["delta"];
 
                 // Handle content delta
@@ -509,7 +521,13 @@ pub fn execute_tool(
             let name = args["name"].as_str().unwrap_or("New Site");
             let domain = args["domain"].as_str().unwrap_or("site.test");
             let php_version = args["php_version"].as_str().unwrap_or("8.3");
-            let _template = args["template"].as_str().unwrap_or("default");
+            // Templates need the async TemplateManager + AppHandle, which tools don't have.
+            let template_note = match args["template"].as_str() {
+                Some(t) if !t.is_empty() && t != "default" && t != "blank" => {
+                    "\nNote: templates are not supported here; a blank site was created."
+                }
+                _ => "",
+            };
 
             let config = read_config();
             let document_root = std::path::Path::new(&config.sites_directory)
@@ -528,11 +546,12 @@ pub fn execute_tool(
 
             let site = SiteManager::create(req)?;
             Ok(format!(
-                "Site '{}' created successfully at {}\nDomain: {}\nPHP: {}{}",
+                "Site '{}' created successfully at {}\nDomain: {}\nPHP: {}{}{}",
                 site.name,
                 site.document_root,
                 site.domain,
                 site.php_version,
+                template_note,
                 reload_nginx_note()
             ))
         }

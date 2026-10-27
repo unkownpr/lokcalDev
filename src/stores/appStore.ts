@@ -36,6 +36,9 @@ async function autoStartServices() {
   }
 }
 
+// initialize() has side effects (auto-start, dnsmasq); StrictMode/remounts must not run it twice.
+let initStarted = false
+
 export const useAppStore = create<AppStore>((set) => ({
   initialized: false,
   systemInfo: null,
@@ -48,6 +51,8 @@ export const useAppStore = create<AppStore>((set) => ({
   updateProgress: null,
 
   initialize: async () => {
+    if (initStarted) return
+    initStarted = true
     try {
       await tauri.initializeApp()
       const systemInfo = await tauri.getSystemInfo()
@@ -81,6 +86,7 @@ export const useAppStore = create<AppStore>((set) => ({
         })
         .catch(() => {})
     } catch (err) {
+      initStarted = false
       set({ error: String(err) })
     }
   },

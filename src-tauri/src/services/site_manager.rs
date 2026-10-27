@@ -102,9 +102,12 @@ impl SiteManager {
     /// The document root is written into a quoted nginx `root "..."` directive; characters that
     /// would break out of it make nginx reject the config for every site.
     fn validate_document_root(path: &str) -> Result<(), AppError> {
-        if path.trim().is_empty()
-            || path.contains(['"', ';', '{', '}', '$', '\r', '\n'])
-        {
+        if path.trim().is_empty() || !std::path::Path::new(path).is_absolute() {
+            return Err(AppError::Config(
+                "Document root must be an absolute path".into(),
+            ));
+        }
+        if path.contains(['"', ';', '{', '}', '$', '\r', '\n']) {
             return Err(AppError::Config(
                 "Document root contains characters not allowed in nginx config".into(),
             ));
@@ -408,7 +411,12 @@ impl SiteManager {
         {
             let tld = domain.rsplit('.').next().unwrap_or("");
             let status = DnsManager::get_resolver_status(tld);
-            if status.configured {
+            // Sites created via the hosts fallback before the resolver existed still have an
+            // /etc/hosts entry; only skip removal (and its password prompt) when there is none.
+            let in_hosts = DnsManager::list_entries()
+                .map(|e| e.iter().any(|x| x.domain == domain))
+                .unwrap_or(false);
+            if status.configured && !in_hosts {
                 // dnsmasq wildcard handles removal automatically — reload to confirm
                 DnsManager::reload_dnsmasq();
                 return;

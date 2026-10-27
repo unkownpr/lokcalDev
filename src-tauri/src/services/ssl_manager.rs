@@ -1,6 +1,7 @@
 use crate::config::paths;
 use crate::error::AppError;
 use crate::services::download_manager::DownloadManager;
+use crate::services::site_manager::SiteManager;
 use crate::services::utils;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
@@ -160,6 +161,17 @@ impl SslManager {
 
     pub fn remove_certificate(domain: &str) -> Result<(), AppError> {
         utils::validate_domain(domain)?;
+        // nginx configs of SSL sites reference this cert; deleting it would make nginx refuse
+        // to load the config for every site.
+        if let Some(site) = SiteManager::list()?
+            .iter()
+            .find(|s| s.ssl && s.domain.eq_ignore_ascii_case(domain))
+        {
+            return Err(AppError::Config(format!(
+                "Certificate is used by site '{}'; disable SSL on that site first",
+                site.name
+            )));
+        }
         let ssl_dir = paths::get_ssl_dir();
         let cert_path = ssl_dir.join(format!("{}.pem", domain));
         let key_path = ssl_dir.join(format!("{}-key.pem", domain));
